@@ -141,7 +141,8 @@ test.describe('Windows XP 桌面', () => {
      * 会排到 x=1488、超出桌面宽 1440 约 48px；而**这些按钮在移植页里根本没被绘制出来**
      * （实测：按钮位置像素与任务栏空白处完全相同 `48,114,229`，强制 `ice.dirty = true`
      * 与聚焦窗口后依旧如此；仓里既有的 `xp-desktop.png` 也没有任务按钮）。
-     * 也就是说：这是**上游示例的既有行为**，`src/ported/windows-xp/main.ts` 又禁止手改，
+     * 也就是说：这是**上游示例的既有行为**；`src/machines/windows-xp/main.ts` 已收归本仓自维护（可直接改），
+     * 上游 `examples/windows-xp.html` 仍是只读的，
      * 所以本仓不做修，但如实排除、并在此写清依据 —— 将来上游修好了，这一行可以删掉。
      */
     await expectLayoutClean(page, { allowIdPrefixes: ['game-overlay', 'task-'] });

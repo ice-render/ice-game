@@ -61,7 +61,7 @@ src/
 `../ice-web-components/examples/` 是**别人的仓库**，本仓对它是**只读消费**：
 
 - 本仓任何脚本、任何命令都**不得**写入、重命名、删除上游的 `examples/*.html`
-  （`scripts/sync-upstream.mjs` 只读上游、只写自己 `src/ported/`）；
+  （`scripts/sync-upstream.mjs` 只读上游、只写自己 `src/ported/`；windows-xp 已迁出到 `src/machines/`，不再由它生成）；
 - 上游的 9 个示例（`admin` / `algorithm-sandbox` / `arcade` / `custom-component` /
   `dos-terminal` / `gallery` / `pixel-editor` / `windows-xp` / `workbench`）
   **必须原样留在原处**：本仓只是"另外拷一份进来用"，不是"把示例搬走"。

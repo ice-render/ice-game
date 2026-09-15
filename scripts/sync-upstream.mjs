@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * 从上游 `ice-web-components/examples/` 抽取游戏页，生成三个 webpack 入口里的两个游戏入口。
+ * 从上游 `ice-web-components/examples/` 抽取游戏页，生成 `src/ported/` 分区里的页面入口
+ * （当前只有 arcade）。windows-xp 已收归 `src/machines/` 自维护，不再由本脚本生成。
  *
  * 为什么要有这个脚本，而不是手工拷一遍了事：
  * 拷贝之后两个工程就分叉了 —— 上游修了 `arcade.html` 的 bug，ice-game 不会自动拿到。
@@ -55,22 +56,6 @@ const PAGES = [
         ['空格', '硬降 / 暂停'],
         ['P · R · L', '暂停 · 重开 · 排行榜'],
         ['F2', '回到 BIOS 菜单'],
-      ],
-    },
-  },
-  {
-    name: 'windows-xp',
-    source: 'windows-xp.html',
-    meta: {
-      title: 'Windows XP 桌面',
-      tagline: '会自己开机的画布桌面：开机自检 → 欢迎屏 → 桌面',
-      accent: '#245edb',
-      features: ['扫雷', 'ICE Arcade', '记事本', '画图', '我的电脑', '我的文档', 'Internet Explorer', '显示属性'],
-      controls: [
-        ['双击图标', '打开程序'],
-        ['拖标题栏', '移动窗口'],
-        ['开始菜单', '注销 / 关机'],
-        ['右键雷区', '插旗 / 问号'],
       ],
     },
   },

@@ -1,10 +1,14 @@
 // @ts-nocheck
 /**
- * ⚠️ 生成物，禁止手改：正文由 `scripts/sync-upstream.mjs` 从
- *    `../ice-web-components/examples/windows-xp.html` 的内联 <script> 正文**逐字**抽取。
- *    要改玩法请改上游页，然后 `npm run sync:upstream`。
+ * **自维护源码（可手改）**：本文件已从 `scripts/sync-upstream.mjs` 的抽取链路中迁出，
+ * 收归 `src/machines/windows-xp/` 由 ice-game 自己维护，不再被 `npm run sync:upstream` 覆盖。
  *
- * 与上游页的唯一差异 = 下面两行 import：上游靠 <script src="…umd.js"> 把 `ICE` / `ICEWEB`
+ * 来历：最初由 `sync-upstream` 从 `../ice-web-components/examples/windows-xp.html` 的内联
+ * `<script>` 正文**逐字**抽取（含本仓在组件库里做的两处视觉修正：开始按钮画旗 + 托盘用
+ * 喇叭/盾牌/ WiFi 图标代替 emoji，避免画布 emoji 乱码）。迁出后，这份 `main.ts` 就是真相来源，
+ * 要改玩法**直接改这里**即可，不用回头改上游。
+ *
+ * 与上游页的差异 = 下面两行 import：上游靠 `<script src="…umd.js">` 把 `ICE` / `ICEWEB`
  * 挂在 window 上，这里改成模块引入 —— `import * as` 拿到的命名空间对象与 UMD 全局**形状一致**
  * （`ICE.ICE`、`ICE.ICEBoxLayout`、`ICEWEB.ICEPanel` 照旧），所以正文一字不用改。
  *
@@ -227,6 +231,64 @@ import * as ICEWEB from 'ice-web-components';
         return nodes;
       };
 
+      /** 微软四色小旗（自绘，非官方素材）。任务栏开始按钮也要用，所以提到图标辅助区。 */
+      const xpFlag = (parent, left, top, size) => {
+        const gap = Math.max(2, Math.round(size * 0.07));
+        const cell = (size - gap) / 2;
+        const skew = Math.round(size * 0.08);
+        const colors = ['#f65314', '#7cbb00', '#00a1f1', '#ffbb00'];
+        [[0, 0, 0], [1, 0, skew], [0, 1, 0], [1, 1, skew]].forEach(([cx, cy, dy], index) => {
+          parent.addChild(
+            new W.ICEWidget({
+              left: Math.round(left + cx * (cell + gap)),
+              top: Math.round(top + cy * (cell + gap) - dy),
+              width: Math.ceil(cell),
+              height: Math.ceil(cell),
+              radius: Math.max(2, Math.round(size * 0.08)),
+              fill: true,
+              stroke: false,
+              interactive: false,
+              style: { fillStyle: colors[index] },
+            }),
+            false,
+          );
+        });
+      };
+      /** 托盘小图标：离屏 canvas 自绘（避开画布内禁用彩色 emoji 的铁律）。返回 dataURL。 */
+      const trayGlyphSrc = (kind, opts = {}) => {
+        const S = 16;
+        const c = document.createElement('canvas');
+        c.width = S;
+        c.height = S;
+        const g = c.getContext('2d');
+        if (!g) return '';
+        g.lineWidth = 1.4;
+        g.strokeStyle = '#eaf1fb';
+        g.fillStyle = '#eaf1fb';
+        if (kind === 'speaker') {
+          g.beginPath();
+          g.moveTo(3, 6); g.lineTo(6, 6); g.lineTo(9, 3); g.lineTo(9, 13); g.lineTo(6, 10); g.lineTo(3, 10); g.closePath();
+          g.fill();
+          if (opts.muted) {
+            g.strokeStyle = '#ff6b6b'; g.lineWidth = 1.8;
+            g.beginPath(); g.moveTo(11, 5); g.lineTo(15, 11); g.moveTo(15, 5); g.lineTo(11, 11); g.stroke();
+          } else {
+            g.beginPath(); g.arc(9.5, 8, 3, -0.7, 0.7); g.stroke();
+            g.beginPath(); g.arc(9.5, 8, 5.5, -0.7, 0.7); g.stroke();
+          }
+        } else if (kind === 'shield') {
+          g.beginPath();
+          g.moveTo(8, 2.5); g.lineTo(13, 4.5); g.lineTo(13, 8.5);
+          g.quadraticCurveTo(13, 12, 8, 14); g.quadraticCurveTo(3, 12, 3, 8.5); g.lineTo(3, 4.5); g.closePath();
+          g.fillStyle = 'rgba(120,200,255,0.45)'; g.fill();
+          g.strokeStyle = '#eaf1fb'; g.stroke();
+        } else if (kind === 'wifi') {
+          [4, 6.5, 9].forEach((r) => { g.beginPath(); g.arc(8, 14, r, Math.PI + 0.6, 2 * Math.PI - 0.6); g.stroke(); });
+          g.beginPath(); g.arc(8, 14, 1.2, 0, 2 * Math.PI); g.fill();
+        }
+        return c.toDataURL('image/png');
+      };
+
       /* ============================ 桌面壁纸 ============================ */
       /* ------------------------------ 壁纸（按真实 Bliss 采样数据程序化生成） ------------------------------
        * 参考图只用来量数据（天空渐变取样、山脊每列高度、草地的明暗带），不随仓库分发：
@@ -442,16 +504,18 @@ import * as ICEWEB from 'ice-web-components';
         stroke: false,
       });
       gradient(startButton, 2, 2, 92, TASKBAR_H - 4, '#3c8c1e', '#7ad04a', 8, 10);
+      // 真实四色波浪旗（替代原来的 ⊞ 近似符）
+      xpFlag(startButton, 12, (TASKBAR_H - 18) / 2, 18);
       startButton.addChild(
         new W.ICELabel({
           interactive: false,
-          left: 8,
+          left: 36,
           top: 0,
-          width: 84,
+          width: 68,
           height: TASKBAR_H,
-          text: '⊞  开始',
+          text: '开始',
           verticalAlign: 'middle',
-          style: { fontSize: 14, fontWeight: '700', fontStyle: 'italic', fillStyle: '#ffffff', fontFamily: XPFONT },
+          style: { fontSize: 14, fontWeight: '700', fontStyle: 'normal', fillStyle: '#ffffff', fontFamily: XPFONT },
         }),
         false,
       );
@@ -480,32 +544,39 @@ import * as ICEWEB from 'ice-web-components';
         interactive: false,
         style: { fillStyle: 'rgba(255,255,255,0.14)' },
       });
-      const trayLabel = new W.ICELabel({
+      // 托盘图标：自绘（不用 emoji，避免画布内渲染成方框，也符合禁 emoji 铁律）
+      const trayLabel = new W.ICEWidget({
         id: 'tray-icons',
-        interactive: false,
-        left: 8,
+        left: 6,
         top: 0,
         width: 96,
         height: TASKBAR_H - 4,
-        text: '🔊  🛡  📶',
-        verticalAlign: 'middle',
-        style: { fontSize: 12, fillStyle: '#ffffff' },
+        fill: false,
+        stroke: false,
+        interactive: false,
       });
+      const glyphY = (TASKBAR_H - 4 - 16) / 2;
+      const speakerImg = new ICE.ICEImage({ left: 2, top: glyphY, width: 16, height: 16, src: trayGlyphSrc('speaker', { muted: false }) });
+      const shieldImg = new ICE.ICEImage({ left: 24, top: glyphY, width: 16, height: 16, src: trayGlyphSrc('shield') });
+      const wifiImg = new ICE.ICEImage({ left: 46, top: glyphY, width: 16, height: 16, src: trayGlyphSrc('wifi') });
+      trayLabel.addChild(speakerImg, false);
+      trayLabel.addChild(shieldImg, false);
+      trayLabel.addChild(wifiImg, false);
       tray.addChild(trayLabel, false);
       /** 点托盘里的喇叭静音 / 取消静音（开机音、注销音都归它管）。 */
       const traySoundToggle = new W.ICEWidget({
         id: 'tray-sound',
-        left: 4,
-        top: 2,
+        left: 0,
+        top: 0,
         width: 26,
-        height: TASKBAR_H - 8,
+        height: TASKBAR_H - 4,
         radius: 3,
         fill: false,
         stroke: false,
       });
       traySoundToggle.on('click', () => {
         sound.enabled = !sound.enabled;
-        trayLabel.setText(sound.enabled ? '🔊  🛡  📶' : '🔇  🛡  📶');
+        speakerImg.setState({ src: trayGlyphSrc('speaker', { muted: !sound.enabled }) });
         if (sound.enabled) playCue('click');
         toast(sound.enabled ? '音效已开启' : '音效已关闭', 'info');
       });
@@ -2626,29 +2697,7 @@ import * as ICEWEB from 'ice-web-components';
         { key: 'guest', name: '访客', avatar: '🙂', accent: '#2e9e5b', note: '无需密码 · 直接进入' },
       ];
 
-      /** 微软四色小旗（自绘，非官方素材）。 */
-      const xpFlag = (parent, left, top, size) => {
-        const gap = Math.max(2, Math.round(size * 0.07));
-        const cell = (size - gap) / 2;
-        const skew = Math.round(size * 0.08);
-        const colors = ['#f65314', '#7cbb00', '#00a1f1', '#ffbb00'];
-        [[0, 0, 0], [1, 0, skew], [0, 1, 0], [1, 1, skew]].forEach(([cx, cy, dy], index) => {
-          parent.addChild(
-            new W.ICEWidget({
-              left: Math.round(left + cx * (cell + gap)),
-              top: Math.round(top + cy * (cell + gap) - dy),
-              width: Math.ceil(cell),
-              height: Math.ceil(cell),
-              radius: Math.max(2, Math.round(size * 0.08)),
-              fill: true,
-              stroke: false,
-              interactive: false,
-              style: { fillStyle: colors[index] },
-            }),
-            false,
-          );
-        });
-      };
+      // xpFlag 已上移到图标辅助区（任务栏开始按钮也要用，需在其之前定义）。
       /** 建一个标签并挂上去（`addChild` 不返回子节点，所以这里自己返回，方便后面 setText）。 */
       const xpLabel = (parent, props) => {
         const label = new W.ICELabel({
@@ -3113,7 +3162,7 @@ import * as ICEWEB from 'ice-web-components';
       const showSoundHint = () => {
         if (soundHintShown) return;
         soundHintShown = true;
-        toast('托盘里的 🔊 可以关掉音效', 'info');
+        toast('托盘里的喇叭图标可以关掉音效', 'info');
       };
 
       /* ============================ 组装 ============================ */

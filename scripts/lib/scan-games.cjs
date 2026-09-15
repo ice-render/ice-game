@@ -12,7 +12,8 @@
  * | 分区 | 目录 | 内容 | 能否手改 |
  * |---|---|---|---|
  * | `games` | `src/games/<slug>/` | 自研单页小游戏 | **就是要改** |
- * | `ported` | `src/ported/<slug>/` | 从上游抽取的整机（arcade / XP） | **禁止手改**（会被 sync 覆盖） |
+ * | `ported` | `src/ported/<slug>/` | 从上游逐字抽取的整机（arcade） | **禁止手改**（会被 sync 覆盖） |
+ * | `machines` | `src/machines/<slug>/` | 自维护的整机（windows-xp，已从 sync 链路迁出） | **可手改** |
  *
  * 分区是物理隔离的：混在一个目录里只靠文档约束，迟早有人改错地方。
  *
@@ -22,7 +23,7 @@
  *    这条让"写到一半的目录"不会被误打包，也让新建游戏有了明确的完成动作。
  * 2. **`slug` 必须等于目录名**，且全局唯一（`games` 与 `ported` 之间也不能重名）——
  *    否则两个游戏会抢同一个 webpack chunk / 同一个 `xxx.html`，静默互相覆盖。
- * 3. **`kind` 必须与分区一致**（games 只能 `game`，ported 只能 `machine`），免得首页分组错乱。
+ * 3. **`kind` 必须与分区一致**（games 只能 `game`，ported / machines 只能 `machine`），免得首页分组错乱。
  * 4. `slug` 只能是小写字母/数字/连字符（它要当文件名与 URL）。
  */
 const fs = require('node:fs');
@@ -31,7 +32,8 @@ const path = require('node:path');
 /** 分区表：目录名 + 该分区允许的 kind。顺序 = 扫描顺序。 */
 const PARTITIONS = [
   { name: 'games', kind: 'game', label: '小游戏' },
-  { name: 'ported', kind: 'machine', label: '整机展厅' },
+  { name: 'ported', kind: 'machine', label: '整机展厅（上游移植）' },
+  { name: 'machines', kind: 'machine', label: '整机展厅（自维护）' },
 ];
 
 /** 小游戏页面的默认画布规格（`meta.json` 可覆盖）。 */

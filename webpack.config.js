@@ -157,7 +157,8 @@ class CopyCoversPlugin {
  * 本仓三种页面的 HTML 来源完全不同：
  *   - 首页 `src/home/index.html`（自己写）
  *   - 小游戏 `src/templates/page.html`（共用模板 + meta.json 注入）
- *   - 整机 `src/ported/<slug>/index.html`（**从上游逐字抽取的生成物，禁止手改**）
+ *   - 整机 `src/ported/<slug>/` 与 `src/machines/<slug>/` 的 `index.html`（各自带骨架：style + canvas；
+ *     `ported` 是上游逐字抽取、`machines` 自维护，但 SEO 都在产出后统一注入，不在这里手改）
  *
  * 第三种的「禁止手改」是硬约束（会被 `npm run sync:upstream` 覆盖），所以 SEO 只能
  * **产出之后**统一追加。好处顺带把前两种也覆盖了：加新游戏自动有 SEO，不用记着配。
@@ -277,7 +278,10 @@ module.exports = (env, argv) => {
     throw new Error(`页面元数据有问题，先修好再构建：\n  - ${scanErrors.join('\n  - ')}`);
   }
   const games = pages.filter((p) => p.partition === 'games');
-  const ported = pages.filter((p) => p.partition === 'ported');
+  // 整机分区（ported = 上游逐字移植的 arcade；machines = 自维护的 windows-xp 等）都自带
+  // index.html 骨架（style + canvas），不套小游戏共用模板，走同一段 HtmlWebpackPlugin 生成。
+  const machinePartitions = ['ported', 'machines'];
+  const ported = pages.filter((p) => machinePartitions.includes(p.partition));
 
   return {
     /**
@@ -289,7 +293,7 @@ module.exports = (env, argv) => {
      *
      * entry 与 HtmlWebpackPlugin 都由上面的扫目录结果生成：
      * - 小游戏（`src/games/*`）→ 共用 `src/templates/page.html`，标题/尺寸/背景由 meta.json 注入
-     * - 上游移植（`src/ported/*`）→ 用各自的 index.html（那是从上游逐字抽取的骨架，不能统一）
+     * - 整机（`src/ported/*` 上游移植 / `src/machines/*` 自维护）→ 用各自的 index.html（自带骨架，不能统一模板）
      */
     entry: {
       home: path.resolve(__dirname, 'src/home/main.ts'),
@@ -344,7 +348,7 @@ module.exports = (env, argv) => {
             },
           }),
       ),
-      // 上游移植的整机：各自带骨架（逐字抽取的 style + canvas），不套共用模板
+      // 整机（ported 上游移植 / machines 自维护）：各自带骨架，不套共用模板
       ...ported.map(
         (p) =>
           new HtmlWebpackPlugin({

@@ -8,7 +8,7 @@ import { collectErrors, expectCanvasPainted, expectLayoutClean } from './support
  * 它只做"这页没坏"的最低限度断言（无报错 + 画布真的画出了东西），
  * 深一点的交互验证放在各游戏自己的 spec 里（如 `breakout.spec.ts`）。
  *
- * 这一层的价值在于**覆盖**：`src/ported/` 里两台整机（掌机 / XP 桌面）是上游搬来的重内容，
+ * 这一层的价值在于**覆盖**：`src/ported/`（arcade 掌机）与 `src/machines/`（windows-xp 桌面）两台整机是重内容，
  * 改动引擎或组件库版本后最容易悄悄坏掉，靠人工记得去点一遍不现实。
  *
  * 为什么每页都要 `waitForTimeout`：这些页面都有入场/开机动画（XP 还得跑自检、掌机跑 BIOS），

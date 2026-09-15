@@ -42,7 +42,7 @@
 |---|---|
 | ![打砖块 · 进行中](screenshots/breakout-playing.png) | ![打砖块 · 待发球](screenshots/breakout-ready.png) |
 
-**整机展厅**（`src/ported/<slug>/`，从 `ice-web-components/examples/` 移植）：
+**整机展厅**（`src/ported/<slug>/` 上游移植 + `src/machines/<slug>/` 自维护）：
 
 | | 页面 | 内容 |
 |---|---|---|

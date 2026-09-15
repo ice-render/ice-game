@@ -6,7 +6,7 @@
  *
  * | 来源 | 怎么来的 | 漏了会怎样 |
  * |---|---|---|
- * | 目录集合 | `src/games/*` + `src/ported/*`（含 meta.json 的） | ——（这是源头） |
+ * | 目录集合 | `src/games/*` + `src/ported/*` + `src/machines/*`（含 meta.json 的） | ——（这是源头） |
  * | 生成物 | `npm run gen:catalog` → `src/domain/catalog.generated.json` | 首页少一张卡片 / 点进去 404 |
  * | 产物 | webpack 扫目录生成的 `dist/<slug>.html` | 玩不到 / 链接失效 |
  *
