@@ -294,6 +294,8 @@ test.describe('SEO：站点级文件', () => {
     expect(response.status()).toBe(200);
     const svg = await response.text();
     expect(svg).toContain('<svg');
-    expect(svg).toContain('viewBox="0 0 32 32"');
+    // 品牌图标是「一块冰」等距 3D 冰块（自绘 CC0）：viewBox 经收紧贴合图形外接框，
+    // 不再是旧版播放三角的 0 0 32 32。这里只断言它是带 viewBox 的合法 SVG。
+    expect(svg).toMatch(/viewBox="\d+ \d+ \d+ \d+"/);
   });
 });

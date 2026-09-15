@@ -54,9 +54,9 @@ const PAGES = [];
 /** 品牌「一块冰」：等距 3D 冰块，自绘 CC0，与页面徽标 `brandBadge` 同形。 */
 const FAVICON =
   "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='22 22 84 84'>" +
-  "<path d='M79 44 L79 98 L101 82 L101 28 Z' fill='%239ed4ff' stroke='%235aa9f5' stroke-width='3' stroke-linejoin='round'/>" +
-  "<path d='M27 44 L79 44 L79 98 L27 98 Z' fill='%23bfe6ff' stroke='%235aa9f5' stroke-width='3' stroke-linejoin='round'/>" +
-  "<path d='M27 44 L79 44 L101 28 L49 28 Z' fill='%23eaf7ff' stroke='%235aa9f5' stroke-width='3' stroke-linejoin='round'/></svg>";
+  "<path d='M79 44 L79 98 L101 82 L101 28 Z' fill='%2379d0ec' stroke='%2336b0d4' stroke-width='3' stroke-linejoin='round'/>" +
+  "<path d='M27 44 L79 44 L79 98 L27 98 Z' fill='%23a6e3f5' stroke='%2336b0d4' stroke-width='3' stroke-linejoin='round'/>" +
+  "<path d='M27 44 L79 44 L101 28 L49 28 Z' fill='%23e6fbff' stroke='%2336b0d4' stroke-width='3' stroke-linejoin='round'/></svg>";
 
 const sha256 = (text) => crypto.createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12);
 

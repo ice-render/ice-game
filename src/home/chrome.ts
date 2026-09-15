@@ -100,9 +100,9 @@ export function fitControlWidth(text: string, fontSize: number, fontWeight: stri
  * @param options.fillStyle / radius 旧签名保留但不再使用（颜色由冰块 SVG 自带）。
  */
 const ICE_CUBE_RAW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 22 84 84">
-  <path d="M79 44 L79 98 L101 82 L101 28 Z" fill="#9ed4ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M27 44 L79 44 L79 98 L27 98 Z" fill="#bfe6ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M27 44 L79 44 L101 28 L49 28 Z" fill="#eaf7ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M79 44 L79 98 L101 82 L101 28 Z" fill="#79d0ec" stroke="#36b0d4" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L79 98 L27 98 Z" fill="#a6e3f5" stroke="#36b0d4" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L101 28 L49 28 Z" fill="#e6fbff" stroke="#36b0d4" stroke-width="3" stroke-linejoin="round"/>
   <path d="M54 36 L96 36" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
   <circle cx="40" cy="54" r="3" fill="#ffffff" opacity="0.8"/>
 </svg>`;
