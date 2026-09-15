@@ -22,13 +22,65 @@ export const NAVBAR_CANVAS = 'navbar';
 /** 首页背景效果层画布的 id（粒子 / 网格 / 光斑，见 `src/home/effects-canvas.ts`）。 */
 export const EFFECTS_CANVAS = 'bg';
 
-/** 收集 pageerror 与 console error；用例收尾断言它是空的。 */
-export function collectErrors(page: Page): string[] {
+/**
+ * 收集 `pageerror`、console error 与资源加载失败；用例收尾断言它是空的。
+ *
+ * ## 为什么资源失败要**两条路都收**
+ *
+ * 浏览器给控制台的措辞是**一句不含 URL 的话**（`Failed to load resource: the server
+ * responded with a status of 404 (Not Found)`）—— 光看它根本不知道是哪个资源挂了，
+ * 排查只能靠猜（本仓就为此白查过一轮）。
+ *
+ * 但**只看 `response` 事件也不行**：`/favicon.ico` 这类**浏览器层**发起的隐式请求
+ * 不经过页面的网络栈，`page.on('response')` 收不到它（实测：去掉 icon 链接后
+ * console 报 404，而 response 一条都没有）。所以：
+ *
+ *  - console 错误**全收**，并用 `consoleMessage.location().url` 把**地址补进消息**
+ *    （Chromium 会把它填成那个失败的资源地址，正好补上措辞里缺的那段）；
+ *  - `response` 再收一遍 4xx/5xx，用来兜住"没有 console 消息"的资源失败；
+ *  - 两者指向同一个 URL 时**去重**，免得一个 404 报成两条。
+ *
+ * `allowedNotFound` 放行**已知且可解释**的 404（放行必须写清理由，
+ * 别让它变成藏污纳垢的地方）。
+ */
+export function collectErrors(page: Page, options: { allowedNotFound?: string[] } = {}): string[] {
+  const allowed = options.allowedNotFound ?? [];
+  const isAllowed = (url: string) => allowed.some((suffix) => url.endsWith(suffix));
   const errors: string[] = [];
+  /**
+   * 同一个 URL 只记一条。
+   *
+   * 一次资源失败通常**同时**产生 console 消息与 response 事件，而两者的**到达顺序不固定**
+   * （实测 response 有时先到）—— 所以去重必须**两侧都做**，
+   * 只在 response 那侧查"console 是否已经记过"是不够的（那样同一个 404 会报成两条）。
+   */
+  const logged = (url: string) => Boolean(url) && errors.some((entry) => entry.includes(url));
+
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`.slice(0, 300)));
+
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(`console: ${m.text()}`.slice(0, 300));
+    if (m.type() !== 'error') return;
+    /*
+     * `location()` 对"资源加载失败"这类消息会把 url 填成**那个失败的资源**，
+     * 措辞里缺的地址就在这里 —— 补上它，404 才定位得到。
+     * （取不到就退回原消息，不因为拿不到 location 而漏报。）
+     */
+    const location = typeof m.location === 'function' ? m.location() : null;
+    const url = location && location.url ? location.url : '';
+    if (url && (isAllowed(url) || logged(url))) return;
+    errors.push(`console: ${m.text()}${url ? ` @ ${url}` : ''}`.slice(0, 300));
   });
+
+  page.on('response', (response) => {
+    const status = response.status();
+    if (status < 400) return;
+    const url = response.url();
+    if (isAllowed(url) || logged(url)) return;
+    // 这条兜住"没有 console 消息"的资源失败；反过来 console 那条也兜住
+    // "没有 response 事件"的（浏览器层发起的 /favicon.ico 就是这类）
+    errors.push(`http ${status} ${url}`);
+  });
+
   return errors;
 }
 

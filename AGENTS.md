@@ -221,6 +221,21 @@ e2e 里也**不要把导航高度写死**（曾经写 `navBottom - 60`，高度�
 页面背景的细网格**曾经用 CSS**，现在也挪到 `#bg` 画布上（用画布画才能动：粒子漂移 + 网格呼吸）。
 CSS 只留最底那层底色渐变（`body { background-image: radial-gradient(...) }`）。
 
+### 10. 外链地址来自 `src/domain/family-repos.ts`，且**必须核实过**
+
+页脚/导航里的 GitHub 地址集中在该文件（零依赖、可单测）。规矩：
+
+- 地址必须**逐个核实可访问**（开发时用 HTTP 请求确认返回 200），
+  不要按命名习惯推断 —— 家族里有 `ice-render-dsl` / `ice-chart-dsl` / `ice-entity-designer-dsl`
+  三个 DSL 包，光看名字很容易写错。
+- **本仓没开源就如实标"未开源"**，不要为了页脚好看编一个地址 —— 挂 404 比不挂更糟。
+  `SELF_REPO.published` 控制这件事；建好远端后填 `url` + 置 `published: true` 即可。
+
+### 11. 游戏规则必须是**零运行时依赖的纯逻辑**
+
+`model.ts` 不 import 引擎、不碰 DOM。好处：规则能在 node 里单测（`npm test` 0.2 秒跑完），
+不需要浏览器、不需要引擎产物。`main.ts` 只负责装配与画面 —— 这条分界是单测跑得快的前提。
+
 ### 12. 入口页优先用**家族组件**，不要手拼几何图形
 
 `src/home/*` 的定位是"**展示家族控件本身**"，所以版面一律先找现成组件：
@@ -291,20 +306,40 @@ CSS 只留最底那层底色渐变（`body { background-image: radial-gradient(.
 将来版面再变高会立刻报错而不是退回成假用例。点击用例也一并先滚，
 理由不是"不滚会失败"（实测不会），而是真实用户只能点他看得见的东西。
 
-### 10. 外链地址来自 `src/domain/family-repos.ts`，且**必须核实过**
+### 15. SEO 注入在**构建期**做，且 icon 链接必须排在 head 最前面
 
-页脚/导航里的 GitHub 地址集中在该文件（零依赖、可单测）。规矩：
+本仓所有页面都是整屏画布，**爬虫与屏幕阅读器读不到任何内容** —— 所以每页都要注入
+TDK / JSON-LD / **文字版**（`.ice-seo-sr`，视觉隐藏但含真实 `<a>` 链接）。
+唯一实现在 `scripts/lib/seo.cjs`，注入点是 `webpack.config.js` 的 `SeoPlugin`。
 
-- 地址必须**逐个核实可访问**（开发时用 HTTP 请求确认返回 200），
-  不要按命名习惯推断 —— 家族里有 `ice-render-dsl` / `ice-chart-dsl` / `ice-entity-designer-dsl`
-  三个 DSL 包，光看名字很容易写错。
-- **本仓没开源就如实标"未开源"**，不要为了页脚好看编一个地址 —— 挂 404 比不挂更糟。
-  `SELF_REPO.published` 控制这件事；建好远端后填 `url` + 置 `published: true` 即可。
+**为什么必须在 webpack 层注入，而不是改模板**：`src/ported/<slug>/index.html` 是
+**禁止手改**的生成物（会被 `npm run sync:upstream` 覆盖）。在产出之后统一注入，
+顺带把小游戏模板与首页也覆盖了 —— 加新游戏自动有 SEO。
 
-### 11. 游戏规则必须是**零运行时依赖的纯逻辑**
+**为什么文字版不算"隐藏关键词"**：它的内容与画布**同源**（都从 `meta.json` / 目录数据生成），
+且用 `clip-path` 隐藏而不是 `display:none`（后者会让辅助技术直接跳过）。
+**要改这段内容，先改画布**；不要往里加画布上没有的东西。
 
-`model.ts` 不 import 引擎、不碰 DOM。好处：规则能在 node 里单测（`npm test` 0.2 秒跑完），
-不需要浏览器、不需要引擎产物。`main.ts` 只负责装配与画面 —— 这条分界是单测跑得快的前提。
+三条踩出来的硬约束：
+
+1. **`<link rel="icon">` 必须排在 head 最前面**（用 `injectHeadTop`，插在 `<meta charset>` 之后）。
+   跟着其它 meta 一起插到 `</head>` 之前（= head 末尾）的话，Chrome 会在解析到它之前
+   就认定"这页没图标"，自己去请求 `/favicon.ico` → **每个页面都多一条 404**。
+   实测确认过 URL 就是 `/favicon.ico`。
+   ⚠️ 这个失败**e2e 抓不住**：favicon 是**浏览器层**的隐式请求（`page.on('response')` 收不到），
+   且 404 会被 Chrome 缓存 —— 把位置改回去重跑反而可能是绿的（做敏感度自检时发现的）。
+   所以这条由**单测**确定性地守：断言产物里 `rel="icon"` 的位置 < `<title>` 的位置。
+2. **模板里原有的内联 data URI 图标不要删**：它能挡住隐式的 /favicon.ico 请求；
+   但**搜索引擎不认 data URI**，所以必须**再给一个可抓取的文件**（`favicon.svg`）。
+   两者并存是对的（同一枚图标），e2e 断言"存在指向文件的 icon 链接"。
+3. **没有站点根就不写绝对 URL**：`canonical` / `og:url` / `og:image` / `sitemap.xml`
+   都要求绝对地址，而本仓没有域名 —— 配了 `ICE_GAME_SITE_URL` 就全补齐，
+   没配就**一个都不写**（编个假域名比不写更糟，同铁律 10 的道理）。
+   爬虫发现页面的主路径是**首页文字版里的真实链接**，那条不依赖域名。
+
+**viewport 按每个页面自己的画布宽度**（`readCanvasWidth`），别写死 1180 ——
+本仓画布宽度不统一（小游戏与首页 1180，Windows XP 桌面是 1440×900），
+写死会让其中一个页面的移动端初始视口与画布不匹配（这条断言曾经假失败过）。
 
 ## 门禁
 
@@ -338,6 +373,36 @@ e2e 的判据分三层（**缺一层就会出现"看起来通过其实没验证"
 `channel: 'chrome'`：用系统 Chrome，绕开 Playwright 自带无头壳与本地缓存版本对不上的坑。
 `reuseExistingServer: false`：端口被别的服务占着时**直接响亮失败**，而不是静默复用别人的目录。
 **端口**：本仓 8098，可用 `ICE_GAME_PORT` 覆盖（本机 8096/8097 被无关常驻服务占着）。
+
+### `collectErrors` 报资源失败时会带上 **URL**
+
+`e2e/support.ts` 的 `collectErrors` 同时收 `pageerror`、console error 与 4xx/5xx 响应，
+并且**两条路都收**：
+
+- console 的措辞（`Failed to load resource … 404`）**本身不含地址**，
+  但 `consoleMessage.location().url` 会被 Chromium 填成**那个失败的资源** —— 用它把地址补进消息；
+- `response` 事件再收一遍 4xx/5xx，兜住"没有 console 消息"的资源失败。
+
+反过来也成立：**只看 `response` 会漏**。像 `/favicon.ico` 这种**浏览器层**发起的隐式请求
+不经过页面的网络栈，`page.on('response')` **收不到**（实测：去掉图标链接后 console 报 404，
+而 response 一条都没有）。这就是最初"404 是哪个资源"查不出来、只能靠猜的原因。
+
+两者指向同一 URL 时**去重**（一次失败只报一条；去重必须两侧都做 —— 实测 response 有时先到）。
+已知且可解释的 404 用 `collectErrors(page, { allowedNotFound: ['/gallery.html'] })` 按 **URL** 放行
+（`windows-xp.spec.ts` 的 `ALLOWED_NOT_FOUND`），比早期"按措辞放行"精确得多。
+
+### ⚠️ jest 的 `expect` 只收一个参数
+
+`expect(value, '提示')` 是 **Playwright** 的用法；jest 会直接抛
+`Expect takes at most one argument.`（本项目已踩两次 —— `tests/domain/family-repos.test.ts`
+里早就写着这条，但写新单测时又犯了一次）。说明写进注释，或者用 matcher 自己的消息位置。
+
+### 门禁必须做**敏感度自检**
+
+写完任何判据，都要**故意改坏被测对象、确认门禁会红**，否则它可能是个空门
+（本仓在"单份引擎"判据上两次绿着漏判；`windows-xp.spec.ts` 的 404 白名单也这样验过一次）。
+配套经验：**有些问题确定性门禁抓不住**（如上面的 favicon 404 有竞态 + 缓存），
+那就换一个**不依赖运行时行为**的判据（断言产物里的位置关系），而不是放着不管。
 
 ## 已知的上游现象（不是本仓缺陷，但要知道）
 

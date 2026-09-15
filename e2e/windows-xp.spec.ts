@@ -20,21 +20,24 @@ import { RECT_HELPER, collectErrors, dblclickCanvas, expectCanvasPainted, expect
 const ICON_ORDER = ['computer', 'documents', 'notepad', 'paint', 'minesweeper', 'ie', 'display', 'arcade'];
 
 /**
- * 已知的、可解释的资源 404（不是缺陷）。
+ * 已知的、可解释的资源 404（不是缺陷）—— 按 **URL 后缀**放行。
  *
- * ⚠️ 浏览器给控制台的措辞**不含 URL**（就是一句 `Failed to load resource: … 404 (Not Found)`），
- * 所以这里只能按措辞放行；**真正的精确性由上层的"确认 404 的 URL 是哪个"来保证**
- * （见 `collectNotFoundUrls()` + 用例里的断言）。加进白名单必须写清"为什么"，
- * 否则白名单会变成藏污纳垢的地方。
+ * 为什么能按 URL 而不用按措辞猜：`collectErrors` 现在把
+ * `consoleMessage.location().url` 补进消息里了（Chromium 会把它填成那个失败的资源地址），
+ * 所以 404 是可定位的（这条曾经只能靠"只要报 404 就放行"）。
+ *
+ * **加进白名单必须写清"为什么"**，否则白名单会变成藏污纳垢的地方。
+ * 现行唯一一项：IE 程序真 `fetch('/gallery.html')` 而本仓 dist 里没有它（见文件头说明）。
  */
-const KNOWN_404 = [/Failed to load resource.*404/];
+const ALLOWED_NOT_FOUND = ['/gallery.html'];
 
 /**
  * 收集真实的 404 响应 URL。
  *
- * 为什么必须用 `response` 事件而不是看控制台：控制台只给"有个资源 404"，不给地址。
- * 有了 URL 才能**正面确认**"404 的就是明知会缺的 gallery.html"，
- * 而不是"只要报 404 就放行"。
+ * 用来**正面确认**"404 的就是明知会缺的 gallery.html"，而不是"只要报 404 就放行"。
+ * 注意它收的是 `response` 事件（有响应体的那些）——
+ * 像 `/favicon.ico` 那种浏览器层发起的隐式请求不出现在这里，
+ * 那条由 `collectErrors` 从 console 消息的 location 里抓。
  */
 function collectNotFoundUrls(page: Page): string[] {
   const urls: string[] = [];
@@ -42,11 +45,6 @@ function collectNotFoundUrls(page: Page): string[] {
     if (res.status() === 404) urls.push(res.url());
   });
   return urls;
-}
-
-/** 把控制台报错里的已知项滤掉，剩下的才算真问题。 */
-function realErrors(errors: string[]): string[] {
-  return errors.filter((e) => !KNOWN_404.some((pattern) => pattern.test(e)));
 }
 
 /**
@@ -68,7 +66,7 @@ async function bootToDesktop(page: Page) {
 
 test.describe('Windows XP 桌面', () => {
   test('开机自检画面有内容，内置程序数量与目录一致', async ({ page }) => {
-    const errors = collectErrors(page);
+    const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
     await page.addInitScript({ content: RECT_HELPER });
     await page.goto('/windows-xp.html');
 
@@ -88,7 +86,7 @@ test.describe('Windows XP 桌面', () => {
   });
 
   test('一路开机到桌面，双击图标打开扫雷', async ({ page }) => {
-    const errors = collectErrors(page);
+    const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
     await page.addInitScript({ content: RECT_HELPER });
     await page.goto('/windows-xp.html');
 
@@ -111,11 +109,11 @@ test.describe('Windows XP 桌面', () => {
     const count = await page.evaluate(() => (window as any).__result.openWindows.size);
     expect(count).toBeGreaterThan(opened);
 
-    expect(realErrors(errors)).toEqual([]);
+    expect(errors).toEqual([]);
   });
 
   test('八个内置程序都能打开（逐个开，无未知报错）', async ({ page }) => {
-    const errors = collectErrors(page);
+    const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
     const notFoundUrls = collectNotFoundUrls(page);
     await page.goto('/windows-xp.html');
     await bootToDesktop(page);
@@ -162,11 +160,11 @@ test.describe('Windows XP 桌面', () => {
       `出现未知的 404 资源：${notFoundUrls.filter((u) => !/\/gallery\.html$/.test(u)).join('、')}`,
     ).toBe(true);
 
-    expect(realErrors(errors)).toEqual([]);
+    expect(errors).toEqual([]);
   });
 
   test('扫雷真的能玩：点格子会翻开（点前后局部像素变化）', async ({ page }) => {
-    const errors = collectErrors(page);
+    const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
     await page.addInitScript({ content: RECT_HELPER });
     await page.goto('/windows-xp.html');
     await bootToDesktop(page);
@@ -230,6 +228,6 @@ test.describe('Windows XP 桌面', () => {
 
     const after = await regionSignature();
     expect(after, '点了几格之后扫雷区域应当有变化（否则点不动 = 玩法不可用）').not.toBe(before);
-    expect(realErrors(errors)).toEqual([]);
+    expect(errors).toEqual([]);
   });
 });

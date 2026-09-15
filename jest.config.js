@@ -1,7 +1,14 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/tests/**/*.test.ts'],
+  /*
+   * 测试分两类，所以有两条模式：
+   *  - `.test.ts` —— `src/` 的业务层（纯数据与纯函数）；
+   *  - `.test.cjs` —— `scripts/lib/*.cjs` 那些**构建期脚本**。
+   *    它们是 CJS（webpack 配置要 `require` 它们），写成 `.cjs` 测试才能直接 require，
+   *    不用为了类型在 TS 测试里做 `@ts-ignore` 体操。
+   */
+  testMatch: ['<rootDir>/tests/**/*.test.ts', '<rootDir>/tests/**/*.test.cjs'],
   transform: {
     '^.+\\.ts$': [
       'ts-jest',

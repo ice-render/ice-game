@@ -132,18 +132,25 @@ src/
    ├─ navbar.ts         吸顶导航（独立画布 #navbar，position: fixed）
    ├─ footer.ts         页脚（家族仓库链接；布局是纯函数，量高与渲染共用）
    ├─ chrome.ts         导航/页脚共用的品牌徽标、链接、分隔线
-   ├─ index.html        两块画布 + CSS（导航固定、主体滚动）
+   ├─ effects-canvas.ts 背景动效层（独立画布 #bg：光斑 / 网格 / 粒子星座）
+   ├─ index.html        三块画布 + CSS（导航与动效固定、主体滚动）
    └─ covers/<slug>.png ← 生成物（npm run covers 自动抓，勿手改）
+
+scripts/lib/
+├─ scan-games.cjs    「本仓有哪些页面」的唯一实现（构建 / 目录生成 / 一致性门禁三处共用）
+├─ family-guard.cjs  「每个家族包只进来一份」的判据
+└─ seo.cjs           ★ SEO 元数据的唯一实现（TDK / JSON-LD / 文字版 / robots / sitemap）
 ```
 
 两个分区是**物理隔离**的：`games/` 是开发区（就是要改），`ported/` 是上游产物（禁止手改，
 跟随上游只需 `npm run sync:upstream`）。详见 [AGENTS.md](./AGENTS.md)。
 
-> **为什么首页有两块画布**：页面主体（`#canvas`）随窗口滚动，而导航要永远可见。
-> 画在主体画布里的话导航会跟着滚走（要它不动就得每帧按 `scrollY` 重画）。
-> 于是用家族里现成的「岛」套路：`#navbar` 是一块独立画布 + 独立 `ICE` 实例，
-> CSS `position: fixed` 吸在视口顶部 —— 真正的吸顶、零重绘成本，
-> 页面画布那边一行不用改（只在 CSS 里留出顶部位置）。
+> **为什么首页有三块画布**：页面主体（`#canvas`）随窗口滚动，而导航要永远可见、
+> 背景动效要每帧重绘 —— 三者需求完全不同。于是用家族里现成的「岛」套路各起一块独立画布：
+> `#navbar`（`fixed`，吸顶导航）与 `#bg`（`fixed` 视口大小，粒子/网格，**每帧重绘**），
+> `#canvas` 是静态主体（只在交互时重绘）。
+> 把会动的那层隔离出来是必须的 —— 否则"让背景动起来"就等于每帧重绘整页两千像素高的内容；
+> 顺带还得到免费视差（`#bg` 固定而主体滚动，星星像在玻璃后面不动）。
 > 库里的 `ICEAffix` / `ICEAnchor` **用不上**：它们服务的是画布内滚动容器（`ICEScrollPane`），
 > 而这里的滚动发生在窗口上。
 
@@ -202,7 +209,42 @@ npm run covers -- breakout              # 只重拍某个（改了一个游戏�
 - 缺封面**不算错误**：首页画占位块并在底部提示跑 `npm run covers`；
   真正会被门禁拦下的是**不一致**（生成物说有封面、`dist/covers/` 里却没有）。
 
-## 6. 依赖
+## 6. SEO（整页都在 Canvas 里，所以专门补了一层）
+
+这些页面是**整屏画布**：文字是 `fillText` 画上去的像素，DOM 里只有一个 `<canvas>`。
+对搜索引擎爬虫（和屏幕阅读器）来说，页面基本是空壳 —— 读不到标题、读不到说明、
+也**无法顺着链接发现其它页面**。
+
+所以构建期给每个 HTML 注入一层 SEO 元数据（`scripts/lib/seo.cjs` + `webpack.config.js` 的
+`SeoPlugin`，**不改任何模板文件**，因此上游移植页也不用动）：
+
+| 注入什么 | 作用 |
+|---|---|
+| `<title>` / `description` / `keywords` + Open Graph / Twitter Card | TDK 与分享卡片（页面名、说明、按键都从 `meta.json` 动态生成） |
+| `<meta name="viewport" content="width=<画布宽>">` | 移动端初始视口与画布一致（不设的话会把画布两侧裁掉） |
+| `<link rel="icon" href="favicon.svg">` | **可抓取**的站点图标（内联 data URI 图标搜索引擎不认） |
+| JSON-LD（`WebSite` + `ItemList` / `VideoGame`） | 结构化数据：这是个游戏合集、有哪些页面、免费 |
+| **文字版**（`.ice-seo-sr`，视觉隐藏） | 与画布上显示**一致**的标题/说明/操作 + **真实可点的 `<a>` 链接** |
+| `robots.txt` / `sitemap.xml` / `favicon.svg` | 站点级文件 |
+
+**文字版是这一层最关键的**：它让爬虫从任意一个页面都能爬到全站，也让屏幕阅读器第一次能
+"读"到这些游戏。它是 1px + `clip-path` 隐藏的（不是 `display:none` —— 那会让辅助技术直接跳过），
+而内容与画布**同源**（都从 `meta.json` / 目录数据生成），所以这不是"隐藏关键词"。
+
+### 有域名之后配一次就够
+
+`canonical` / `og:url` / `og:image` / `sitemap.xml` 都要求**绝对 URL**，而本仓目前没有对外域名 ——
+所以**默认不写这几项**（编一个假域名比不写更糟）。有域名后加一个环境变量即可全部补齐：
+
+```bash
+ICE_GAME_SITE_URL=https://example.com/ice-game npm run build
+# → canonical / og:url / og:image 全部使用绝对地址，并生成 sitemap.xml，robots.txt 自动指向它
+```
+
+没配时构建会打印一行提示；`robots.txt` 里也会写明"为什么没有 Sitemap 行"。
+爬虫发现页面的主路径是**首页里那些真实链接**，这条不依赖域名。
+
+## 7. 依赖
 
 ```jsonc
 "dependencies": {
@@ -216,7 +258,7 @@ npm run covers -- breakout              # 只重拍某个（改了一个游戏�
 改完兄弟仓 `npm run build` 立刻吃到新产物。**加新依赖时必须同时补三处**（package.json → webpack alias →
 tsconfig paths），漏了会在构建或类型检查期直接报错，见 `AGENTS.md` 铁律 2。
 
-## 7. 已知现象
+## 8. 已知现象
 
 两条**上游示例的既有行为**（不是本仓缺陷，改动属上游职责）：
 
@@ -229,7 +271,7 @@ tsconfig paths），漏了会在构建或类型检查期直接报错，见 `AGEN
 > 另外：`ice-render` 引擎仓**正在被其他人并行重构**，若恰好撞上对方重建 `dist/` 的瞬间，
 > 本仓的 `tsc` / webpack 可能报"找不到模块"之类的**瞬时**错误 —— 重跑即恢复，不用改代码。
 
-## 8. License
+## 9. License
 
 MIT，见 [LICENSE](./LICENSE)。引擎与组件库的版权归原作者（大漠穷秋）。
 上游示例页的音效是 WebAudio 现场合成的原创音、图标全部由引擎图元绘制，**不含任何 Microsoft 素材**。

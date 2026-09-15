@@ -3,6 +3,7 @@ const fs = require('fs');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { buildMarkers, collectCopies, findDuplicates, describeDuplicates } = require('./scripts/lib/family-guard.cjs');
 const { scanAll } = require('./scripts/lib/scan-games.cjs');
+const { applySeo, buildRobotsTxt, buildSitemapXml, FAVICON_PATH, FAVICON_SVG } = require('./scripts/lib/seo.cjs');
 
 const WORKSPACE = path.resolve(__dirname, '..');
 
@@ -148,6 +149,119 @@ class CopyCoversPlugin {
   }
 }
 
+/**
+ * 给每个产出的 HTML 注入 SEO 元数据（TDK / Open Graph / JSON-LD / 文字版）。
+ *
+ * ## 为什么必须在这一层做，而不是改模板
+ *
+ * 本仓三种页面的 HTML 来源完全不同：
+ *   - 首页 `src/home/index.html`（自己写）
+ *   - 小游戏 `src/templates/page.html`（共用模板 + meta.json 注入）
+ *   - 整机 `src/ported/<slug>/index.html`（**从上游逐字抽取的生成物，禁止手改**）
+ *
+ * 第三种的「禁止手改」是硬约束（会被 `npm run sync:upstream` 覆盖），所以 SEO 只能
+ * **产出之后**统一追加。好处顺带把前两种也覆盖了：加新游戏自动有 SEO，不用记着配。
+ *
+ * ## 时机：必须在 html-webpack-plugin 之后
+ *
+ * HWP 在 `PROCESS_ASSETS_STAGE_OPTIMIZE_INLINE`(700) 里生成并 minify HTML；
+ * 这里挂在 `OPTIMIZE_TRANSFER`(3000)，拿到的是最终 HTML（`<head>` / `</head>` /
+ * `</body>` 都已存在，minifier 会把这些可选标签补齐）。
+ *
+ * 代价：注入的片段**不会被 minify**（带缩进、注释也留着）。这是有意的 ——
+ * 产物里那段格式化的注释能让后来的人一眼看出"这段是生成的，别手改产物"，
+ * 几百字节换一个不会被误解的产物，划算。
+ *
+ * ## 站点地址
+ *
+ * `canonical` / `og:url` / `og:image` / `sitemap.xml` 都需要**绝对 URL**，
+ * 而本仓没有域名 → 只读环境变量 `ICE_GAME_SITE_URL`，**没配就省略这几个字段**
+ * （绝不编一个假域名，理由见 `scripts/lib/seo.cjs` 顶部）。
+ */
+class SeoPlugin {
+  /**
+   * @param {{ pages: any[] }} options 扫目录得到的页面清单（与 entry / HWP 同一份）
+   */
+  constructor(options) {
+    this.pages = options.pages;
+  }
+
+  apply(compiler) {
+    const { Compilation, sources, WebpackError } = compiler.webpack;
+
+    compiler.hooks.thisCompilation.tap('SeoPlugin', (compilation) => {
+      compilation.hooks.processAssets.tap({ name: 'SeoPlugin', stage: Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_TRANSFER }, () => {
+        const siteUrl = normalizeSiteUrl(process.env.ICE_GAME_SITE_URL);
+        if (process.env.ICE_GAME_SITE_URL && !siteUrl) {
+          compilation.errors.push(
+            new WebpackError(
+              `ICE_GAME_SITE_URL="${process.env.ICE_GAME_SITE_URL}" 不是合法的 http(s) 地址 —— ` +
+                `SEO 的 canonical / og:url / sitemap.xml 需要绝对 URL。已按"未配置"处理（这些字段省略）。`,
+            ),
+          );
+        }
+
+        /**
+         * 这个页面用哪张图当分享封面（`og:image` 用）。
+         *
+         * - 游戏页用它自己的封面（`covers/<slug>.png`，由 `CopyCoversPlugin` 拷进 dist）；
+         * - **首页自己没有封面** —— 分享到社交平台时没图会很难看，所以借"站点里第一张有封面的截图"
+         *   当站点预览图。语义上说得通（它就是访客进站第一眼看到的东西）。
+         *   要更像样的分享卡片，将来可以专门烘一张 1200×630 的图放进来。
+         * - 只有这个 asset **真的存在**才引用（`gen-catalog` 的 `cover` 标记保证过，
+         *   但这里再确认一次：引一个 404 的图比不引更糟）。
+         */
+        const pickCover = (page) => {
+          const candidates = page ? [page] : this.pages;
+          for (const item of candidates) {
+            const path = `covers/${item.slug}.png`;
+            if (compilation.getAsset(path)) return path;
+          }
+          return null;
+        };
+
+        // ① 每个 HTML 各注入一次
+        for (const name of Object.keys(compilation.assets)) {
+          if (!name.endsWith('.html')) continue;
+          // 首页（`index.html`）在 pages 里找不到 → page = null，走站点级文案
+          const page = this.pages.find((item) => item.page === name) || null;
+          const html = compilation.getAsset(name).source.source().toString();
+          const next = applySeo(html, { page, pages: this.pages, siteUrl, coverUrl: pickCover(page) });
+          compilation.updateAsset(name, new sources.RawSource(next));
+        }
+
+        // ② 站点级文件
+        compilation.emitAsset('robots.txt', new sources.RawSource(buildRobotsTxt(siteUrl)));
+        // 真实可抓取的站点图标：页面里内联的 data URI 图标能避免 /favicon.ico 404，
+        // 但搜索引擎不认 data URI，必须有一个文件（见 seo.cjs 的 FAVICON_PATH 说明）。
+        compilation.emitAsset(FAVICON_PATH, new sources.RawSource(FAVICON_SVG));
+        const sitemap = buildSitemapXml({ pages: this.pages, siteUrl });
+        if (sitemap) {
+          compilation.emitAsset('sitemap.xml', new sources.RawSource(sitemap));
+        } else if (compiler.options.mode === 'production') {
+          // 不是错误，是"还差一步"。只在 production 提示，免得 dev 每次重建都刷屏。
+          console.log(
+            '\n  ℹ️  SEO：未配置 ICE_GAME_SITE_URL，已跳过 canonical / og:url / sitemap.xml。\n' +
+              '      有对外域名后加一次环境变量即可全部补齐：ICE_GAME_SITE_URL=https://example.com npm run build\n' +
+              '      （爬虫发现页面靠的是首页里那些真实链接，这部分不受影响）',
+          );
+        }
+      });
+    });
+  }
+}
+
+/**
+ * 归一化站点地址：只接受 `http(s)://host[/path]`，去掉末尾斜杠。
+ * 非法输入返回 `null`（调用方按"未配置"处理，而不是拿一个坏地址去拼 URL）。
+ */
+function normalizeSiteUrl(raw) {
+  if (!raw) return null;
+  const text = String(raw).trim();
+  if (!/^https?:\/\/[^\s/]+/i.test(text)) return null;
+  return text.replace(/\/+$/, '');
+}
+
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
@@ -239,6 +353,11 @@ module.exports = (env, argv) => {
             chunks: [p.chunk],
           }),
       ),
+      /**
+       * SEO 注入 —— 放在**最后**（可读性上表示"它作用于上面全部产出的 HTML"）。
+       * 真正决定时机的是插件内部的资产阶段（`OPTIMIZE_TRANSFER`），与这里的顺序无关。
+       */
+      new SeoPlugin({ pages }),
     ],
     devServer: {
       // 8098：家族端口分配见 playwright.config.ts 顶部注释；
