@@ -61,10 +61,11 @@ const SEO_MARKER = '<!-- ice-seo:injected -->';
  */
 const FAVICON_PATH = 'favicon.svg';
 
-/** 站点图标内容（与页面里内联的那个同形：品牌蓝底 + 白色播放三角）。 */
-const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0d6efd"/>
-  <path d="M12 9l12 7-12 7z" fill="#ffffff"/>
+/** 站点图标内容（与页面里内联的那个同形：一块冰 / 等距 3D 冰块，自绘 CC0）。 */
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 22 84 84">
+  <path d="M79 44 L79 98 L101 82 L101 28 Z" fill="#9ed4ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L79 98 L27 98 Z" fill="#bfe6ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L101 28 L49 28 Z" fill="#eaf7ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
 </svg>
 `;
 

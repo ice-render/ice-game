@@ -7,7 +7,7 @@
  * 这一层是**首页专用**，所以不放 `src/kit/`：kit 的定位是"每个游戏都会重复写的东西"，
  * 而导航栏/页脚是应用外壳，游戏里不会出现。
  */
-import { ICEIsogon } from 'ice-render';
+import { ICEImage } from 'ice-render';
 import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import type { GamePageHandle } from '../kit';
 
@@ -80,23 +80,40 @@ export function fitControlWidth(text: string, fontSize: number, fontWeight: stri
 }
 
 /**
- * 品牌徽标：圆角方块 + 播放三角（与页面 favicon 同形）。
+ * 品牌徽标：**一块冰（等距视角的 3D 冰块）**。
  *
- * 三角用引擎的 `ICEIsogon`（正多边形，`edges: 3`）画，**不用字符**：
- * 引擎的文本渲染走 canvas `fillText`，`▶` 这类"几何形状字符"在部分字体/平台下会走
- * 彩色 emoji 呈现，渲染成怪符号（AGENTS 铁律 6 已记录同类问题）。
- * 用图元拼出来的 mark 在任何字体环境下都稳定，也不依赖字体有没有这个字形。
+ * 原先是"圆角蓝方块 + 白色播放三角"，看起来像个视频播放按钮，用户觉得太丑。
+ * 改成一块冰块 —— 用引擎的 `ICEImage` 直接画一张**开源风格的冰块 SVG**
+ * （自绘、CC0 无版权风险），画布里矢量缩放，任意尺寸都清晰。
  *
- * @param options.fillStyle 徽标底色。可以传 `ice.createLinearGradient(...)` 的渐变对象
- *   （引擎官方支持：`createLinearGradient` 会把停靠点一起记录下来，导出器也认）——
- *   注意**渐变坐标是画布绝对坐标**，所以渐变由调用方按自己的绝对位置构造。
+ * 为什么用 `ICEImage` 而不是 `ICEIsogon`/`ICEPanel` 拼：
+ * 冰块的"三面体 + 高光"是自由多边形，ICE 的基础图元（正多边形 / 圆角矩形）拼不出
+ * 这种等距三面体的立体感；而 `ICEImage` 由引擎的 imageCache 加载并 `drawImage`
+ * 缩放绘制到组件框，等于把一张真·冰块 SVG 当贴图用，最稳也最好看。
+ *
+ * ⚠️ `ICEImage` 是**异步**加载：图片没下载完那一帧 `doRender` 直接跳过（画不出）。
+ * 首页主画布没有常驻动画循环（背景动效在另一个 `#bg` 实例上），所以静态的
+ * 导航栏 / 页脚徽标在图片加载完之后**不会自动重绘**——这里用一张 `new Image()`
+ * _probe 同地址，加载完成就把引擎置脏，强制补一帧。
+ *
+ * @param options.glow   是否在底下垫一圈低透明度的蓝色外发光（导航栏 / hero 用）。
+ * @param options.fillStyle / radius 旧签名保留但不再使用（颜色由冰块 SVG 自带）。
  */
+const ICE_CUBE_RAW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 22 84 84">
+  <path d="M79 44 L79 98 L101 82 L101 28 Z" fill="#9ed4ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L79 98 L27 98 Z" fill="#bfe6ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 44 L79 44 L101 28 L49 28 Z" fill="#eaf7ff" stroke="#5aa9f5" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M54 36 L96 36" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="40" cy="54" r="3" fill="#ffffff" opacity="0.8"/>
+</svg>`;
+/** `data:` URI（URL 编码，避免 base64 体积）：`ICEImage` 与 favicon 共用同款造型。 */
+export const ICE_CUBE_SVG = `data:image/svg+xml,${encodeURIComponent(ICE_CUBE_RAW)}`;
+
 export function brandBadge(
   parent: any,
   options: { left: number; top: number; size?: number; accent: string; radius?: number; fillStyle?: any; glow?: boolean },
 ): any {
   const size = options.size || 28;
-  const accent = options.accent;
 
   // 外发光：一枚比徽标大一圈、低透明度的方块垫在底下（画布里没有 CSS box-shadow，
   // 想要"发光"就得自己叠一层。alpha 压得很低，只做氛围）
@@ -116,37 +133,29 @@ export function brandBadge(
     );
   }
 
-  const badge = new ICEPanel({
+  const badge = new ICEImage({
     interactive: false,
     left: options.left,
     top: options.top,
     width: size,
     height: size,
-    radius: options.radius ?? Math.round(size * 0.28),
-    style: {
-      fillStyle: options.fillStyle || accent,
-      strokeStyle: 'rgba(255,255,255,0.22)',
-      lineWidth: 1,
-      shadowBlur: 0,
-    },
+    src: ICE_CUBE_SVG,
   });
   parent.addChild(badge, false);
 
   /*
-   * 播放三角：`startAngle: 90` 让一个顶点朝上（`dotPath` 的点是绕原点算的），
-   * 再整体右移一点点，视觉上才是"居中"（三角形重心偏左）。
+   * 异步加载补帧：图片下载完时主动把引擎置脏。
+   * `parent` 可能是节点（导航栏的 content widget，用 `parent.ice`）也可能是引擎实例
+   * 本身（页脚传 `page.ice`、hero 传 `ice`），统一兜底到 `parent.ice || parent`。
    */
-  const radius = Math.round(size * 0.25);
-  const triangle = new ICEIsogon({
-    interactive: false,
-    left: Math.round(size / 2 + radius * 0.2),
-    top: Math.round(size / 2),
-    radius,
-    edges: 3,
-    startAngle: 0,
-    style: { fillStyle: '#ffffff', strokeStyle: '#ffffff', lineWidth: 0, shadowBlur: 0 },
-  });
-  badge.addChild(triangle, false);
+  const iceRef = parent && parent.ice ? parent.ice : parent;
+  const probe = new Image();
+  probe.onload = () => {
+    if (iceRef && typeof iceRef.dirty === 'boolean') iceRef.dirty = true;
+  };
+  probe.onerror = () => {};
+  probe.src = ICE_CUBE_SVG;
+
   return badge;
 }
 
