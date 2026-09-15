@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PAGES, entryPages } from '../src/domain/catalog';
-import { collectErrors, expectCanvasPainted } from './support';
+import { collectErrors, expectCanvasPainted, expectLayoutClean } from './support';
 
 /**
  * **目录驱动的逐页冒烟** —— 新增一个游戏，这里自动多一个用例，不需要改测试。
@@ -60,9 +60,10 @@ test.describe('逐页冒烟（目录驱动）', () => {
   /**
    * 自研小游戏的**通用版面不变量** —— 只要用了 `kit/shell` 就自动被覆盖，新游戏不用登记。
    *
-   * 为什么值得写成通用断言：画布外的内容会被引擎**静默裁掉**（没有溢出报错），
-   * 实测过一次"帮助说明的第 4 行只露出半行、控制台一点提示都没有"，
-   * 靠人眼在截图里发现太晚了。
+   * 为什么值得写成通用断言：
+   *  · 画布外的内容会被引擎**静默裁掉**（没有溢出报错）；
+   *  · 两个构件压在一起更是连告警都没有 —— 实测就是靠这套体检抓到
+   *    "breakout 的数值卡压住游戏区 18px"，只有翻截图才看得出来。
    */
   test.describe('小游戏通用不变量', () => {
     const gamePages = PAGES.filter((p) => p.kind === 'game');
@@ -93,8 +94,24 @@ test.describe('逐页冒烟（目录驱动）', () => {
           info.layout.contentBottom,
           `${game.slug} 的外壳内容底边 ${info.layout.contentBottom} 超出画布高度 ${info.canvasHeight}，最下面那行会被裁掉`,
         ).toBeLessThanOrEqual(info.canvasHeight);
-        // 内容也不该从右边溢出去（stage 宽度 + 左边距应当留在画布内）
         expect(info.layout.actionsTop).toBeGreaterThan(0);
+      });
+
+      test(`${game.slug}：版面体检（无越界、无构件交叠）`, async ({ page }) => {
+        const errors = collectErrors(page);
+        await page.goto(`/${game.page}`);
+        await page.waitForFunction(() => Boolean((window as any).__game), undefined, { timeout: 5000 });
+        await page.waitForTimeout(500);
+
+        // 初始态（待发球/覆盖层）+ 进行中，两个状态都要干净
+        await expectLayoutClean(page);
+
+        // 发球进入进行中，再查一次（游戏跑起来之后版面才真正展开）
+        await page.keyboard.press(' ');
+        await page.waitForTimeout(600);
+        await expectLayoutClean(page);
+
+        expect(errors).toEqual([]);
       });
     }
   });

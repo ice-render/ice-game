@@ -20,12 +20,17 @@ import { BreakoutModel, type Brick, type BreakoutEvent } from './model';
 /**
  * 游戏区（stage 局部坐标系的原点在这里）。
  *
- * 高度是**倒推**出来的：画布 800 高 − 底部要给按钮行(40) 与 4 行帮助(~96) 以及留白，
- * 顶部要给标题带与数值卡 —— 于是 stage 只能占 440。
- * 这个约束由 `GameShell.layout.contentBottom` 在构造时检查（超了会告警），
- * e2e 也对每个小游戏断言它 ≤ 画布高度（见 `e2e/catalog.spec.ts`）。
+ * 纵向位置**不是随便定的**：外壳（`kit/shell`）从 `stage` 向上倒推标题带与数值卡、
+ * 向下排按钮行与操作说明，任一条带越界或互相重叠都会在构造期抛错并报出所需数值。
+ * breakout 的预算是：
+ *   上方 16(边距) + 55(标题带) + 16 + 68(数值卡) + 20 = **175** → 取 178 留 3px 余量；
+ *   下方 22 + 40(按钮行) + 12 + 96(4 行说明) = 170 → 178 + 440 + 170 = 788 ≤ 800 ✓
+ *
+ * ⚠️ 这三行数字改之前先跑一遍 `npm run dev` —— 自检会把"至少需要多少"直接打出来。
+ * 早先这里是 170（比需求的 175 少 5px），结果是数值卡压住游戏区 18px，
+ * 只有翻截图才看得出来。
  */
-const STAGE = { left: 230, top: 170, width: 720, height: 440 };
+const STAGE = { left: 230, top: 178, width: 720, height: 440 };
 
 const page = createPage();
 const theme = page.theme;

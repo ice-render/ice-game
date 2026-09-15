@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { findPage } from '../src/domain/catalog';
-import { RECT_HELPER, clickCanvas, collectErrors, expectCanvasPainted } from './support';
+import { RECT_HELPER, clickCanvas, collectErrors, expectCanvasPainted, expectLayoutClean } from './support';
 
 /**
  * 掌机页（`src/games/arcade`，从上游 `ice-web-components/examples/arcade.html` 逐字抽取）。
@@ -84,6 +84,22 @@ test.describe('ICE Arcade 掌机', () => {
     );
 
     await expectCanvasPainted(page, 0.02);
+    expect(errors).toEqual([]);
+  });
+
+  test('版面体检：BIOS 与卡带两个阶段都无越界、无构件交叠', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/arcade.html');
+    await page.waitForFunction(() => Boolean((window as any).__arcade));
+
+    // 阶段 1：BIOS 自检 / 启动菜单（机壳 + 屏幕 + 侧栏都在这一帧）
+    await expectLayoutClean(page);
+
+    // 阶段 2：卡带跑起来之后（棋盘 / 分数卡 / 侧栏都展开了）
+    await page.waitForFunction(() => Boolean((window as any).__arcade.game), undefined, { timeout: 30_000 });
+    await page.waitForTimeout(800);
+    await expectLayoutClean(page);
+
     expect(errors).toEqual([]);
   });
 });

@@ -161,3 +161,229 @@ export async function expectCanvasPainted(
   expect(stats.colors, '不同颜色数').toBeGreaterThan(8);
   return stats;
 }
+
+/* ------------------------------ 版面体检 ------------------------------ */
+
+export interface LayoutIssue {
+  kind: 'overflow' | 'overlap';
+  detail: string;
+}
+
+export interface LayoutAuditResult {
+  canvas: string;
+  nodeCount: number;
+  overflow: string[];
+  overlaps: string[];
+}
+
+/**
+ * **版面体检**：在页面里跑，返回越界与"部分交叠"清单。
+ *
+ * 为什么要做成通用门禁：画布应用的版面错乱**没有天然的报错** ——
+ * 两个卡片压在一起、数值卡压住游戏区，引擎照常绘制，只有人眼看截图才发现。
+ * 实测就是这样抓到 kit/shell 的数值卡压住游戏区 18px 的。
+ *
+ * 用引擎现成的 `getAccessibilityTree()`（给出 id / box / visible / parentId），
+ * 不自己遍历显示树。
+ *
+ * ⚠️ **实测确认**：`box` **已经是相对画布的坐标**（CSS 像素），不是相对视口 ——
+ * 曾按"屏幕坐标"理解、又减了一次画布偏移，得到满屏假越界。
+ *
+ * 判据的四层排除（每一层都是被误报逼出来的）：
+ *   1. **祖先-后代不算**（沿 `parentId` 链）：卡片包含文字是设计；
+ *   2. **不占地的容器不算**：`fill === false && stroke === false` 的 widget
+ *      （kit 的 `game-shell`、`game-overlay` 根）只是排版的透明层；
+ *   3. **完全包含不算**：一方完整包住另一方 = 背景板 / 卡片含内容。
+ *      要抓的是**部分交叠**（边界互相切入），那才是版面算错的典型症状；
+ *   4. **尺寸 ≤2px 忽略**：细分隔线互相擦到没意义。
+ */
+export async function auditLayout(
+  page: Page,
+  options: { canvasId?: string; iceSource?: 'main' | 'navbar'; allowIdPrefixes?: string[]; tolerancePx?: number } = {},
+) {
+  return page.evaluate(
+    ({ canvasId, iceSource, allowIdPrefixes, tolerancePx }) => {
+      const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+      if (!canvas) return { error: `没有 #${canvasId}` };
+
+      /*
+       * ICE 实例必须与画布**成对取**。
+       *
+       * 首页有两块画布、各自一个 ICE 实例：用"主画布的 ICE"去量"导航画布的尺寸"，
+       * 会把主画布上 y > 60 的节点全判成越界（实测踩过：报了一屏假越界）。
+       * 所以这里按来源显式选，不做"哪个能用就用哪个"的兜底。
+       */
+      const sources: Record<string, () => any> = {
+        // 主画布：首页 / 小游戏 / 掌机 / XP 的句柄位置各不相同
+        main: () =>
+          ((window as any).__gameHome && (window as any).__gameHome.ice) ||
+          ((window as any).__game && (window as any).__game.page && (window as any).__game.page.ice) ||
+          ((window as any).__arcade && (window as any).__arcade.ice) ||
+          ((window as any).__result && (window as any).__result.ice) ||
+          null,
+        // 吸顶导航（独立画布 + 独立 ICE 实例）
+        navbar: () => (window as any).__gameHome?.navbar?.handle?.page?.ice ?? null,
+      };
+      const ice = sources[iceSource] ? sources[iceSource]() : null;
+      if (!ice || typeof ice.getAccessibilityTree !== 'function') {
+        return { error: `拿不到 ice（来源 ${iceSource}）` };
+      }
+
+      const isSolid = (id: string) => {
+        const node = typeof ice.findComponent === 'function' ? ice.findComponent(id) : null;
+        if (!node || !node.state) return true; // 拿不到就保守当它占地（宁可多报）
+        return node.state.fill !== false || node.state.stroke !== false;
+      };
+      const contains = (a: any, b: any) =>
+        a.left <= b.left + 1 &&
+        a.top <= b.top + 1 &&
+        a.left + a.width >= b.left + b.width - 1 &&
+        a.top + a.height >= b.top + b.height - 1;
+
+      const nodes = ice
+        .getAccessibilityTree()
+        .filter((n: any) => n.visible)
+        .map((n: any) => ({
+          id: n.id,
+          parentId: n.parentId,
+          left: Math.round(n.box.x),
+          top: Math.round(n.box.y),
+          width: Math.round(n.box.width),
+          height: Math.round(n.box.height),
+        }));
+
+      const byId = new Map<string, any>(nodes.map((n: any) => [n.id, n]));
+      const isAncestor = (ancestorId: string, node: any) => {
+        let cursor: string | null = node.parentId;
+        let guard = 0;
+        while (cursor && guard < 60) {
+          if (cursor === ancestorId) return true;
+          cursor = (byId.get(cursor)?.parentId as string | null) ?? null;
+          guard += 1;
+        }
+        return false;
+      };
+
+      const overflow: string[] = [];
+      /**
+       * 是否属于"点名排除的子树"。
+       *
+       * 注意要**向上查祖先链**、不能只看自己的 id：任务按钮被排除时，
+       * 它里面的图标与标题（匿名节点）也要跟着排除，否则会继续报越界
+       * （实测：排除 `task-` 之后仍剩 `ICE_xxx (1350,868 130×28)` 两条）。
+       */
+      const isAllowed = (node: any) => {
+        let cursor: any = node;
+        let guard = 0;
+        while (cursor && guard < 60) {
+          if (cursor.id && allowIdPrefixes.some((prefix) => cursor.id.startsWith(prefix))) return true;
+          cursor = cursor.parentId ? byId.get(cursor.parentId) : null;
+          guard += 1;
+        }
+        return false;
+      };
+
+      for (const n of nodes) {
+        if (n.width <= 0 || n.height <= 0) continue;
+        if (isAllowed(n)) continue;
+        // `tolerancePx`：容忍画布边缘几像素的"出血"（实测 XP 任务栏底边有 2px 越界，
+        // 属视觉上看不出来的装饰线）。几像素 ≠ 版面错乱，别让它把断言弄成噪音。
+        if (
+          n.left < -tolerancePx ||
+          n.top < -tolerancePx ||
+          n.left + n.width > canvas.width + tolerancePx ||
+          n.top + n.height > canvas.height + tolerancePx
+        ) {
+          overflow.push(`${n.id} (${n.left},${n.top} ${n.width}×${n.height})`);
+        }
+      }
+
+      const named = nodes.filter(
+        (n: any) => n.id && !n.id.startsWith('ICE_') && n.width > 2 && n.height > 2 && !isAllowed(n) && isSolid(n.id),
+      );
+      /**
+       * 节点所属的**窗口**（沿父链找 `window-*`）。没有则返回 null。
+       *
+       * 用来放行"**跨窗口交叠**"：桌面系统里窗口本来就可以互相遮挡（还能被拖动），
+       * 两个窗口的内容重叠是**设计**而不是错乱。实测 XP 八窗全开时报出的
+       * `documents-table ∩ notepad-editor` 之类全是这种情况。
+       * 窗口**内部**的构件之间仍然严格检查。
+       */
+      const ownerWindow = (node: any) => {
+        let cursor: any = node;
+        let guard = 0;
+        while (cursor && guard < 60) {
+          if (cursor.id && cursor.id.startsWith('window-')) return cursor.id;
+          cursor = cursor.parentId ? byId.get(cursor.parentId) : null;
+          guard += 1;
+        }
+        return null;
+      };
+
+      const overlaps: string[] = [];
+      for (let i = 0; i < named.length; i += 1) {
+        for (let j = i + 1; j < named.length; j += 1) {
+          const a = named[i];
+          const b = named[j];
+          if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
+          if (contains(a, b) || contains(b, a)) continue;
+          const ownerA = ownerWindow(a);
+          const ownerB = ownerWindow(b);
+          if (ownerA && ownerB && ownerA !== ownerB) continue; // 跨窗口：允许遮挡
+          const overlapX = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left);
+          const overlapY = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top);
+          if (overlapX > 2 && overlapY > 2) {
+            overlaps.push(`${a.id} ∩ ${b.id} = ${overlapX}×${overlapY}px`);
+          }
+        }
+      }
+
+      return {
+        canvas: `${canvas.width}×${canvas.height}`,
+        nodeCount: nodes.length,
+        overflow,
+        overlaps,
+      };
+    },
+    {
+      canvasId: options.canvasId ?? MAIN_CANVAS,
+      iceSource: options.iceSource ?? 'main',
+      allowIdPrefixes: options.allowIdPrefixes ?? DEFAULT_ALLOW_ID_PREFIXES,
+      tolerancePx: options.tolerancePx ?? DEFAULT_EDGE_TOLERANCE_PX,
+    },
+  );
+}
+
+/**
+ * 设计上就该叠在别的构件之上的节点（按 id 前缀）。
+ * `game-overlay` 是 kit 的暂停/结束遮罩 —— 它**就是**要盖住游戏画面。
+ */
+export const DEFAULT_ALLOW_ID_PREFIXES = ['game-overlay'];
+
+/** 画布边缘的容忍像素（详见 `auditLayout` 里的说明）。 */
+export const DEFAULT_EDGE_TOLERANCE_PX = 4;
+
+/**
+ * 断言版面干净：没有越界、没有意外交叠。
+ *
+ * **发现问题时重试一次**（间隔 300ms）再判失败：有些页面有入场动画，
+ * 动画中间态的元素可能短暂越出画布（实测 XP 桌面淡入时见过一次，80 次高频采样都没再复现）。
+ * 重试能容忍这种瞬态、又不放过"稳定越界"的真问题。
+ */
+export async function expectLayoutClean(
+  page: Page,
+  options: { canvasId?: string; iceSource?: 'main' | 'navbar'; allowIdPrefixes?: string[]; tolerancePx?: number } = {},
+): Promise<LayoutAuditResult> {
+  let result = await auditLayout(page, options);
+  if ('error' in result && result.error) {
+    throw new Error(`版面体检失败：${result.error}`);
+  }
+  const clean = (r: typeof result) => r.overflow.length === 0 && r.overlaps.length === 0;
+  if (!clean(result)) {
+    await page.waitForTimeout(300);
+    result = await auditLayout(page, options);
+  }
+  expect(result.overflow, '有节点越出画布（画布外的内容会被静默裁掉）').toEqual([]);
+  expect(result.overlaps, '有构件互相压住（部分交叠 = 版面算错的典型症状）').toEqual([]);
+  return result as LayoutAuditResult;
+}

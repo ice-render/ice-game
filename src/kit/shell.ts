@@ -96,6 +96,27 @@ const HELP_ROW_HEIGHT = 24;
 const ACTION_HEIGHT = 40;
 
 /**
+ * 纵向栈的间距（从 `stage` 倒推，见构造函数里的说明）。
+ *
+ * 这些数**互相独立不了**：改一个就要重新核对"上方/下方空间够不够"，
+ * 所以统一放这里、并在构造时自检。要调版面节奏，改这一组数即可。
+ */
+/** 标题带高度（只有标题）。 */
+const TITLE_BLOCK_HEIGHT = 34;
+/** 标题带高度（标题 + 副标题）。 */
+const TITLE_BLOCK_HEIGHT_WITH_SUBTITLE = 55;
+/** 标题带 → 数值卡 的间距。 */
+const TITLE_GAP_TO_STATS = 16;
+/** 数值卡 → 游戏区 的间距。 */
+const STATS_GAP_TO_STAGE = 20;
+/** 画布顶部至少要留出的空白。 */
+const MIN_TOP_PAD = 16;
+/** 游戏区 → 按钮行 的间距。 */
+const ACTIONS_GAP_TO_STAGE = 22;
+/** 按钮行 → 操作说明 的间距。 */
+const HELP_GAP_TO_ACTIONS = 12;
+
+/**
  * 音效按钮的两个文案。
  *
  * ⚠️ **不要用 🔊 / 🔇 这类 emoji**：引擎的文本渲染走 canvas `fillText`，
@@ -138,11 +159,34 @@ export class GameShell {
     };
     this.stage = stage;
 
-    /** 各带子的纵向位置：全部相对 `stage` 推导，不写绝对坐标。 */
-    const titleTop = Math.max(16, stage.top - 116);
-    const statsTop = Math.max(titleTop + 66, stage.top - STATS_HEIGHT - 20);
-    const actionsTop = stage.top + stage.height + 22;
-    const helpTop = actionsTop + 52;
+    /**
+     * 各带子的纵向位置：**从 `stage` 向上/向下倒推**，不是各自写死。
+     *
+     * 为什么必须倒推：早先这里是一组互不相干的魔法数
+     * （`titleTop = stage.top - 116`、`statsTop = max(titleTop + 66, stage.top - 88)`），
+     * 它们**互相不一致** —— 当标题带够高时，`titleTop + 66` 这个约束会把数值卡顶到
+     * 游戏区里去：实测 breakout 的数值卡与 stage 重叠了 **18px**（体检抓到的）。
+     * 倒推之后，「标题 → 数值卡 → 游戏区」是一条栈，**结构上不可能重叠**。
+     *
+     * 顺带把"到底需要多少上边距"变成一个能算出来的数（见下面的自检），
+     * 调用方一跑就知道该把 `stage.top` 改成多少 —— 而不是靠肉眼看截图。
+     */
+    const titleBlockHeight = options.subtitle ? TITLE_BLOCK_HEIGHT_WITH_SUBTITLE : TITLE_BLOCK_HEIGHT;
+    const statsTop = stage.top - STATS_GAP_TO_STAGE - STATS_HEIGHT;
+    const titleTop = statsTop - TITLE_GAP_TO_STATS - titleBlockHeight;
+    const actionsTop = stage.top + stage.height + ACTIONS_GAP_TO_STAGE;
+    const helpTop = actionsTop + ACTION_HEIGHT + HELP_GAP_TO_ACTIONS;
+
+    // 自检 ①：上方空间不够时**立刻报错**并告诉需要多少（而不是静默压住游戏区）
+    if (titleTop < MIN_TOP_PAD) {
+      const needed = MIN_TOP_PAD + titleBlockHeight + TITLE_GAP_TO_STATS + STATS_HEIGHT + STATS_GAP_TO_STAGE;
+      throw new Error(
+        `[kit/shell] 外壳上方空间不足：stage.top = ${stage.top}，但至少需要 ${needed}。` +
+          `（上边距 ${MIN_TOP_PAD} + 标题带 ${titleBlockHeight} + 间距 ${TITLE_GAP_TO_STATS} + ` +
+          `数值卡 ${STATS_HEIGHT} + 间距 ${STATS_GAP_TO_STAGE}）` +
+          `\n把 stage.top 调到 ≥ ${needed}，或把 meta.json 的 height 调大。`,
+      );
+    }
 
     this.root = new ICEWidget({
       id: 'game-shell',
@@ -356,12 +400,14 @@ export class GameShell {
     }
 
     /*
-     * 内容底边与越界检查。
+     * 内容底边 + **各带互不重叠**自检。
      *
-     * 画布外的内容会被**静默裁掉**（引擎没有"溢出报错"这种东西），所以这里主动算一次、
-     * 越界就告警。告警而不是抛错：外壳先建好、游戏再补画面是正常顺序，
-     * 不该因为版面数字差几像素就让页面白屏；但必须让人看见 —— 否则就是"帮助说明少一行、
-     * 谁也不知道"（实测踩过）。
+     * 画布外的内容会被**静默裁掉**（引擎没有"溢出报错"这种东西），带子之间互相压住更是
+     * 连告警都没有 —— 本文件就是因为这个才把纵向布局改成"从 stage 倒推"：
+     * 实测 breakout 的数值卡曾压住游戏区 18px，靠人眼看截图才发现。
+     *
+     * 这里把各带算成矩形两两求交（覆盖层不算：它**设计上**就盖住游戏区），
+     * 发现重叠就**抛错**并指出是哪两条带 —— 布局错乱应该在构造期就结束。
      */
     const helpHeight = options.help && options.help.length ? HELP_ROW_HEIGHT * options.help.length : 0;
     const hasActions = actions.length > 0 || Boolean(options.sound);
@@ -371,8 +417,34 @@ export class GameShell {
       helpHeight ? helpTop + helpHeight : 0,
     );
     this.layout = { titleTop, statsTop, actionsTop, helpTop, contentBottom };
+
+    const bands: { name: string; top: number; bottom: number }[] = [
+      { name: '标题带', top: titleTop, bottom: titleTop + titleBlockHeight },
+      ...(stats.length ? [{ name: '数值卡行', top: statsTop, bottom: statsTop + STATS_HEIGHT }] : []),
+      { name: '游戏区', top: stage.top, bottom: stage.top + stage.height },
+      ...(hasActions ? [{ name: '按钮行', top: actionsTop, bottom: actionsTop + ACTION_HEIGHT }] : []),
+      ...(helpHeight ? [{ name: '操作说明', top: helpTop, bottom: helpTop + helpHeight }] : []),
+    ];
+    for (let i = 0; i < bands.length; i += 1) {
+      for (let j = i + 1; j < bands.length; j += 1) {
+        const a = bands[i];
+        const b = bands[j];
+        const overlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (overlap > 1) {
+          throw new Error(
+            `[kit/shell] 外壳的「${a.name}」与「${b.name}」重叠 ${overlap}px ` +
+              `(a: ${a.top}~${a.bottom}, b: ${b.top}~${b.bottom})。` +
+              `\n纵向布局是"从 stage 倒推"的，出现重叠说明 stage 的位置/高度与外壳预算不匹配：` +
+              `\n  上方需要 ${MIN_TOP_PAD}+${titleBlockHeight}+${TITLE_GAP_TO_STATS}+${STATS_HEIGHT}+${STATS_GAP_TO_STAGE} ` +
+              `= ${MIN_TOP_PAD + titleBlockHeight + TITLE_GAP_TO_STATS + STATS_HEIGHT + STATS_GAP_TO_STAGE}` +
+              `（自 stage.top 起算），下方需要 ${ACTIONS_GAP_TO_STAGE}+${ACTION_HEIGHT}+${HELP_GAP_TO_ACTIONS}+${helpHeight}。`,
+          );
+        }
+      }
+    }
+
     if (contentBottom > page.height) {
-      console.warn(
+      throw new Error(
         `[kit/shell] 外壳内容底边 ${contentBottom}px 超出画布高度 ${page.height}px —— ` +
           `最下面那行会被裁掉。调小 stage 的高度/位置，或把 meta.json 的 height 调大。`,
       );

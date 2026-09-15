@@ -1,7 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { PAGES, entryPages, findPage, stats } from '../src/domain/catalog';
 import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO } from '../src/domain/family-repos';
-import { NAVBAR_CANVAS, canvasPoint, clickCanvas, collectErrors, expectCanvasPainted } from './support';
+import {
+  NAVBAR_CANVAS,
+  canvasPoint,
+  clickCanvas,
+  collectErrors,
+  expectCanvasPainted,
+  expectLayoutClean,
+} from './support';
 
 /**
  * 游戏厅首页：目录（`src/domain`）→ 画布网格（`src/home`）→ 真实跳转的闭环。
@@ -174,6 +181,28 @@ test.describe('游戏厅首页', () => {
     expect(badges).toHaveLength(PAGES.length);
     // breakout 属于「小游戏」组：分组归位由 kind 决定，写错在构建期就会报错
     expect(findPage('breakout')?.kind).toBe('game');
+  });
+
+  test('版面体检：首页主体与吸顶导航两块画布都无越界、无构件交叠', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(700);
+
+    // ① 主体画布：卡片网格 + 页脚（页脚含多栏链接，最容易排歪）
+    await expectLayoutClean(page);
+
+    // ② 吸顶导航画布：品牌 + 锚点 + 外链挤在 60px 高的一条里，宽度算错就会互相压住。
+    //
+    // 两个必须说清的参数：
+    //  · `iceSource: 'navbar'` —— 导航是**独立 ICE 实例**，必须和它自己的画布成对取，
+    //    否则会拿主画布的节点去比 60px 的高度，满屏假越界；
+    //  · `tolerancePx: bleed` —— 导航背景条**有意**上移 `radius` 像素（让顶部方角、
+    //    底部圆角），那是设计出血、会超出画布上边。数值从页面读，不在测试里写死。
+    const bleed = await page.evaluate(() => (window as any).__gameHome.navbar.bleed);
+    await expectLayoutClean(page, { canvasId: NAVBAR_CANVAS, iceSource: 'navbar', tolerancePx: bleed });
+
+    expect(errors).toEqual([]);
   });
 
   test('吸顶导航：固定在视口顶部、锚点能跳转、内容不压在导航下面', async ({ page }) => {

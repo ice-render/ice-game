@@ -540,6 +540,15 @@ navbar.page.ice.dirty = true;
   navbar: {
     handle: navbar,
     size: { width: navbar.width, height: navbar.height },
+    /**
+     * **有意的画布出血量**（= 导航条的圆角半径）。
+     *
+     * 背景条故意上移 `radius` 像素，让顶部两个角变成方角（圆角部分被画布裁掉）、
+     * 底部保持圆角 —— `ICEPanel` 只支持整体圆角，这是最省事的做法。
+     * e2e 的版面体检要按这个数放行这块出血，所以**从页面暴露出来**，
+     * 而不是让测试里写死一个 16（改导航圆角时会两边不一致）。
+     */
+    bleed: NAVBAR.radius,
     links: navbar.links,
     sections: navbar.sections,
     activeKey: () => navbar.activeKey,
