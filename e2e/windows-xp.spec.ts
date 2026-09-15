@@ -138,16 +138,14 @@ test.describe('Windows XP 桌面', () => {
     /*
      * 八个窗口都开着时版面依然不能乱（关键场景：窗口层叠 + 任务栏按钮排布）。
      *
-     * `allowIdPrefixes: ['task-']` 是**已知上游现象**的例外，不是掩盖问题：
-     * 任务栏按钮（`refreshTaskButtons` 里按固定 168 宽 + 172 间距排）在 8 个窗口时
-     * 会排到 x=1488、超出桌面宽 1440 约 48px；而**这些按钮在移植页里根本没被绘制出来**
-     * （实测：按钮位置像素与任务栏空白处完全相同 `48,114,229`，强制 `ice.dirty = true`
-     * 与聚焦窗口后依旧如此；仓里既有的 `xp-desktop.png` 也没有任务按钮）。
-     * 也就是说：这是**上游示例的既有行为**；`src/machines/windows-xp/main.ts` 已收归本仓自维护（可直接改），
-     * 上游 `examples/windows-xp.html` 仍是只读的，
-     * 所以本仓不做修，但如实排除、并在此写清依据 —— 将来上游修好了，这一行可以删掉。
+     * 任务栏按钮现已修复并正常绘制：
+     *  - 之前按钮是动态创建、默认 z=0，被同级的梯度背景色带（z9000）盖住画不出来；
+     *    已在 `refreshTaskButtons` 里把按钮子树抬到 z9001 压过背景。
+     *  - 之前固定 168 宽 + 172 间距，8 个窗口时第 8 个按钮会排到 x=1488、超出桌面宽 1440；
+     *    现已改为按真实 XP 那样随窗口数把按钮压窄（最小 96 宽），8 个按钮也能排进任务栏区。
+     * 所以不再需要 `task-` 例外，任务栏按钮参与完整的越界 / 交叠体检。
      */
-    await expectLayoutClean(page, { allowIdPrefixes: ['game-overlay', 'task-'] });
+    await expectLayoutClean(page, { allowIdPrefixes: ['game-overlay'] });
 
     /*
      * 这条 404 必须**正面确认**：IE 演示会真 `fetch('/gallery.html')`，而本仓 dist 里没有它

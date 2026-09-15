@@ -588,7 +588,7 @@ import * as ICEWEB from 'ice-web-components';
       const taskButtons = new W.ICEWidget({
         left: 116,
         top: 4,
-        width: 1000,
+        width: SCREEN_W - 314,
         height: TASKBAR_H - 8,
         fill: false,
         stroke: false,
@@ -606,16 +606,23 @@ import * as ICEWEB from 'ice-web-components';
       const openWindows = new Map();
       let activeKey = null;
 
-      const refreshTaskButtons = () => {
-        taskButtons.removeChildren([...taskButtons.childNodes]);
-        let left = 0;
+        const refreshTaskButtons = () => {
+          taskButtons.removeChildren([...taskButtons.childNodes]);
+          // 任务栏按钮区夹在「开始按钮」与「托盘/时钟」之间；窗口多了就按真实 XP 那样把按钮压窄，
+          // 避免第 8 个按钮溢出 1440 桌面宽（之前因此被 e2e 排除，现已修好可正常排布）。
+          const gap = 4;
+          const areaLeft = taskButtons.state.left;
+          const areaRight = SCREEN_W - 198;
+          const count = openWindows.size;
+          const btnW = count > 0 ? Math.max(96, Math.min(168, Math.floor((areaRight - areaLeft - (count - 1) * gap) / count))) : 168;
+          let left = 0;
         openWindows.forEach((entry, key) => {
           const active = activeKey === key && !entry.minimized;
           const button = new W.ICEWidget({
             id: 'task-' + key,
             left,
             top: 0,
-            width: 168,
+            width: btnW,
             height: TASKBAR_H - 8,
             radius: 3,
             fill: true,
@@ -631,7 +638,7 @@ import * as ICEWEB from 'ice-web-components';
               interactive: false,
               left: 30,
               top: 0,
-              width: 130,
+              width: Math.max(20, btnW - 36),
               height: TASKBAR_H - 8,
               text: entry.title,
               verticalAlign: 'middle',
@@ -652,7 +659,10 @@ import * as ICEWEB from 'ice-web-components';
             }
           });
           taskButtons.addChild(button, false);
-          left += 172;
+          // 任务栏整体被 raise 到 z9000（梯度背景也是 9000），但任务按钮是后来动态创建的，
+          // 默认 z 为 0，会被同级的梯度色带盖住而画不出来。把按钮子树抬到 9001 压过背景。
+          raise(button, 9001);
+          left += btnW + gap;
         });
         ice.dirty = true;
       };
@@ -908,8 +918,15 @@ import * as ICEWEB from 'ice-web-components';
         const layout = () => {
           const width = Number(pane.state.width) || 500;
           const height = Number(pane.state.height) || 400;
-          editor.setState({ width: width - 12, height: height - 56 });
-          status.setState({ top: height - 24, width: width - 12 });
+          const w = width - 12;
+          editor.setState({ width: w, height: height - 56 });
+          // 引擎文本节点按初始 width(100) 量过一次，改宽后必须重算，否则首行被省略号截断
+          if (typeof editor.__sync === 'function') editor.__sync();
+          status.setState({ top: height - 24, width: w });
+          // 状态栏同理：标签内文字节点宽度要跟着改，否则「第 1 行…」被截成省略号
+          const statusText = status.getText();
+          if (status.textNode) status.textNode.setState({ width: w });
+          status.setText(statusText);
         };
         pane.revalidate = function () {
           W.ICEWidget.prototype.revalidate.call(this);
@@ -1374,7 +1391,10 @@ import * as ICEWEB from 'ice-web-components';
           const cols = model.getCols();
           const boardWidth = cols * CELL;
           const boardHeight = rows * CELL;
-          const width = Math.max(240, boardWidth + 12);
+          // 顶部栏需要容下「3 个难度按钮(58+4 间距≈182) + 最佳成绩标签(left190,宽140)≈336」，
+          // 比 beginner 棋盘(198)更宽；窗口默认 minWidth:320 会把它钳回去，导致 bestLabel 越界。
+          // 这里把窗宽下限抬到 348，确保顶部栏完整落在窗口框内（不再依赖被钳的 minWidth）。
+          const width = Math.max(240, boardWidth + 12, 348);
           const height = 76 + boardHeight + 34;
           pane.setState({ width, height });
           panelTop.setState({ width: width - 12 });
@@ -3081,6 +3101,9 @@ import * as ICEWEB from 'ice-web-components';
         setPhase('welcome');
         userTiles.forEach((tile) => tile.setState({ display: false }));
         passwordPanel.setState({ display: false });
+        // 登录层隐去前清掉 ICE 焦点：否则密码框的透明 input 代理残留在桌面，
+        // Chrome 会给它画一圈 :focus-visible 蓝框（幽灵蓝框）。
+        W.getICEFocusManager(ice).focus(null);
         welcomeText.setText(`欢迎 ${session.user.name}`);
         welcomeText.setState({ display: true });
         welcomeSub.setText(
