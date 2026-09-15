@@ -60,6 +60,8 @@ const M = {
   badgeSize: 26,
   /** 左栏底部「封面覆盖率」那一行距左栏内容顶的偏移。 */
   progressTop: 112,
+  /** 链接栏压缩时的下限宽度（保证栏不至于被压成一条缝）。 */
+  minColWidth: 150,
   /** 进度条高度。 */
   progressBarHeight: 8,
   /** 进度条左侧文字宽度 / 右侧计数宽度。 */
@@ -205,24 +207,32 @@ function columnRequiredWidth(column: FooterColumn): number {
 /**
  * 各链接栏的宽度与左边缘（相对 `left`）。
  *
- * 每栏先拿"自己需要的宽度"，余量按**比例**摊回去（栏与栏之间不至于挤成一条）；
- * 摊完之后若总宽仍超出可用空间，就**直接抛错**而不是悄悄截断 ——
- * 版面算不下是设计问题（要么删文案、要么加宽画布），不该在屏幕上表现成"少几个字"。
+ * 每栏先拿"自己需要的宽度"，余量按**比例**摊回去（栏与栏之间不至于挤成一条）。
+ *
+ * ⚠️ **排不下时不再抛错** —— 早期版本在 `needed > available` 时直接 `throw`，
+ * 这个错误会一路冒泡到首页 `build()`，把**整页画布弄成空白**（代价远大于"少几个字"）。
+ * 现在改为：**按比例压缩到可用宽度内**，最长的 role 行可能被画布裁掉，但页面照常渲染；
+ * 同时用 `console.warn` 暴露出来，便于本地 `verify` / `test:e2e` 时发现，
+ * 然后去精简 `family-repos.ts` 的 role 文案或加大 `main.ts` 的 `CANVAS_WIDTH`。
  */
 function layoutColumns(available: number): { widths: number[]; lefts: number[] } {
   const columns = footerColumns();
   const required = columns.map(columnRequiredWidth);
   const needed = required.reduce((sum, value) => sum + value, 0);
 
+  let widths: number[];
   if (needed > available) {
-    throw new Error(
-      `首页页脚排不下：三栏至少需要 ${needed}px，可用只有 ${available}px。` +
-        `请精简 family-repos.ts 的 role 文案，或加大 main.ts 的 CANVAS_WIDTH。`,
+    // 版面算不下：压缩而非崩溃（整页空白比裁字严重得多）。
+    console.warn(
+      `首页页脚略窄：三栏至少需要 ${needed}px，可用只有 ${available}px，` +
+        `已按比例压缩（可能裁字）。建议精简 family-repos.ts 的 role 文案，或加大 main.ts 的 CANVAS_WIDTH。`,
     );
+    const scale = available / needed;
+    widths = required.map((value) => Math.max(M.minColWidth, Math.floor(value * scale)));
+  } else {
+    const slack = available - needed;
+    widths = required.map((value) => value + Math.floor((slack * value) / needed));
   }
-
-  const slack = available - needed;
-  const widths = required.map((value) => value + Math.floor((slack * value) / needed));
   // 取整会剩下几像素，补给最后一栏（否则右侧会露出一小段空白）
   widths[widths.length - 1] += available - widths.reduce((sum, value) => sum + value, 0);
 

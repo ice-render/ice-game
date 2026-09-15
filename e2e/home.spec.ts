@@ -384,15 +384,22 @@ test.describe('游戏厅首页', () => {
     await page.waitForFunction(() => Boolean((window as any).__gameHome));
     await page.waitForTimeout(600);
 
-    // ① 链接清单：页脚必须覆盖家族全部仓库 + 主页（与 src/domain/family-repos.ts 同源）
+    // ① 链接清单：页脚必须覆盖家族全部仓库 + 主页 + （本仓已开源时的）本仓自身，
+    //    与 src/domain/family-repos.ts 同源。发布状态由 SELF_REPO 决定，断言也随之变化。
     const footerLinks = await page.evaluate(() => (window as any).__gameHome.footer.links);
-    expect(footerLinks.length).toBe(FAMILY_REPOS.length + 1); // + 家族主页
+    const expectSelfLink = SELF_REPO.published && Boolean(SELF_REPO.url);
+    expect(footerLinks.length).toBe(FAMILY_REPOS.length + 1 + (expectSelfLink ? 1 : 0)); // + 家族主页 (+ 本仓)
     for (const repo of FAMILY_REPOS) {
       expect(footerLinks.map((l: any) => l.url)).toContain(repo.url);
     }
     expect(footerLinks.map((l: any) => l.url)).toContain(FAMILY_HOME);
-    // 未开源的仓不出现链接（页脚渲染成纯文本）
-    expect(footerLinks.map((l: any) => l.text)).not.toContain(`${SELF_REPO.name}`);
+    // 本仓已开源 → 页脚出现可点链接（地址与文案都要对）；未开源 → 渲染成纯文本（不应是链接）
+    if (expectSelfLink) {
+      expect(footerLinks.map((l: any) => l.text)).toContain(SELF_REPO.name);
+      expect(footerLinks.map((l: any) => l.url)).toContain(SELF_REPO.url);
+    } else {
+      expect(footerLinks.map((l: any) => l.text)).not.toContain(SELF_REPO.name);
+    }
 
     // ② 真鼠标点页脚里的 ice-render 链接 → 新标签页打开正确地址
     const target = await page.evaluate(() => {

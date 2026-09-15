@@ -81,7 +81,7 @@ export const FAMILY_HOME = 'https://github.com/ice-render';
  */
 export const SELF_REPO: { name: string; role: string; url: string | null; published: boolean } = {
   name: 'ice-game',
-  role: '本仓：画布游戏厅（用家族控件做的单页小游戏合集）',
+  role: '本仓：画布游戏厅（单页小游戏）',
   url: 'https://github.com/ice-render/ice-game',
   published: true,
 };
