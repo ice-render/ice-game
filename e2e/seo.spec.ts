@@ -44,8 +44,15 @@ async function readSeo(page: Page, path: string) {
     const sr = document.querySelector(`.${srClass}`);
     const srStyle = sr ? getComputedStyle(sr) : null;
     const srRect = sr ? sr.getBoundingClientRect() : null;
-    // 画布的设计宽度（视口应当与它一致 —— 本仓画布宽度并不统一：XP 桌面是 1440）
+    // 画布的设计宽度（视口应当与它一致 —— 本仓画布宽度并不统一：XP 桌面是 1440）。
+    // ⚠️ 字母边（letterbox）页会在运行时用 fitCanvasToDisplaySize 把 <canvas> 的 width 属性
+    // 改成「显示尺寸」，所以这里不能直接读属性，要除以引擎视口缩放还原成设计宽度
+    // （screen = world * scale → world = screen / scale）。scale 缺失的页（小游戏 / 首页）按 1 处理。
     const firstCanvas = document.querySelector('canvas');
+    const ice = (window as any).__arcade?.ice || (window as any).__result?.ice || null;
+    const scale = ice && ice.viewport ? (ice.viewport.scale || 1) : 1;
+    const rect = firstCanvas ? firstCanvas.getBoundingClientRect() : null;
+    const canvasWidth = rect ? Math.round(rect.width / scale) : null;
     return {
       titleCount: document.querySelectorAll('title').length,
       title: document.title,
@@ -53,7 +60,7 @@ async function readSeo(page: Page, path: string) {
       keywords: meta('keywords'),
       robots: meta('robots'),
       viewport: meta('viewport'),
-      canvasWidth: firstCanvas ? Number(firstCanvas.getAttribute('width')) : null,
+      canvasWidth,
       ogTitle: prop('og:title'),
       ogDescription: prop('og:description'),
       canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null,

@@ -79,7 +79,7 @@ src/
 
 | 环节 | 怎么自动跟上 |
 |---|---|
-| 构建入口 + HTML | `webpack.config.js` 扫 `src/games/*` 与 `src/ported/*`（`scripts/lib/scan-games.cjs`） |
+| 构建入口 + HTML | `webpack.config.js` 扫 `src/games/*` 与 `src/ported/*` 与 `src/machines/*`（`scripts/lib/scan-games.cjs`） |
 | 首页卡片 | 读 `src/domain/catalog.ts`（数据来自生成的 `catalog.generated.json`） |
 | e2e 冒烟 | `e2e/catalog.spec.ts` 遍历 `entryPages()`；小游戏还自动套"通用不变量" |
 

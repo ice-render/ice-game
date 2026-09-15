@@ -12,7 +12,7 @@
  * | 分区 | 目录 | 内容 | 能否手改 |
  * |---|---|---|---|
  * | `games` | `src/games/<slug>/` | 自研单页小游戏 | **就是要改** |
- * | `ported` | `src/ported/<slug>/` | 从上游逐字抽取的整机（arcade） | **禁止手改**（会被 sync 覆盖） |
+ * | `ported` | `src/ported/<slug>/` | 从上游逐字抽取的整机（当前无页，arcade 已迁 machines） | **禁止手改**（会被 sync 覆盖） |
  * | `machines` | `src/machines/<slug>/` | 自维护的整机（windows-xp，已从 sync 链路迁出） | **可手改** |
  *
  * 分区是物理隔离的：混在一个目录里只靠文档约束，迟早有人改错地方。

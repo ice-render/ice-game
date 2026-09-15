@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * 从上游 `ice-web-components/examples/` 抽取游戏页，生成 `src/ported/` 分区里的页面入口
- * （当前只有 arcade）。windows-xp 已收归 `src/machines/` 自维护，不再由本脚本生成。
+ * 从上游 `ice-web-components/examples/` 抽取游戏页，生成 `src/ported/` 分区里的页面入口。
+ *
+ * 现状（2026-09-15）：windows-xp 与 arcade 两台整机均已收归 `src/machines/` 自维护
+ * （arcade 因需要页面层居中 + 字母边适配，已迁出、不再由本脚本生成），所以 `PAGES` 目前为空。
+ * 保留本脚本与 `PAGES` 结构，便于将来上游新增页时直接加一项即可复用「逐字抽取 +
+ * meta 仅首次创建不覆盖」的能力。
  *
  * 为什么要有这个脚本，而不是手工拷一遍了事：
  * 拷贝之后两个工程就分叉了 —— 上游修了 `arcade.html` 的 bug，ice-game 不会自动拿到。
@@ -38,28 +42,14 @@ const UPSTREAM_DIR = path.resolve(ROOT, '..', 'ice-web-components', 'examples');
 /**
  * 一个卡带/一台机器 = 一个入口。`source` 是上游文件名，`name` 是本仓目录名（也是 chunk 名）。
  *
- * 全部落在 `src/ported/`（**上游移植分区**）—— 与 `src/games/`（自研小游戏）物理隔离：
- * 这边的产物禁止手改，那边的目录就是要改的。混在一起只靠文档约束，迟早有人改错地方。
+ * 生成物默认落在 `src/ported/`（**上游移植分区**，禁止手改，改上游后 `npm run sync:upstream`
+ * 重新抽取）。需要「页面层自定义」（如 arcade 的居中 + 字母边）的整机应迁到 `src/machines/`
+ * 自维护，并从此数组移除，否则 sync 会覆盖掉手改。
+ *
+ * 当前为空：windows-xp 与 arcade 均已收归 `src/machines/`，暂无需要跟随上游的页。
  */
 const PARTITION = 'ported';
-const PAGES = [
-  {
-    name: 'arcade',
-    source: 'arcade.html',
-    meta: {
-      title: 'ICE Arcade 掌机',
-      tagline: '一台掌机，四张卡带 —— 开机先跑 BIOS 自检再选卡带',
-      accent: '#0d6efd',
-      features: ['俄罗斯方块', '贪吃蛇', '2048', 'CHIP-8'],
-      controls: [
-        ['方向键', '移动 / 旋转'],
-        ['空格', '硬降 / 暂停'],
-        ['P · R · L', '暂停 · 重开 · 排行榜'],
-        ['F2', '回到 BIOS 菜单'],
-      ],
-    },
-  },
-];
+const PAGES = [];
 
 /** 品牌色 `#0d6efd` 的播放键，够小、无外部请求。 */
 const FAVICON =

@@ -158,9 +158,10 @@ class CopyCoversPlugin {
  *   - 首页 `src/home/index.html`（自己写）
  *   - 小游戏 `src/templates/page.html`（共用模板 + meta.json 注入）
  *   - 整机 `src/ported/<slug>/` 与 `src/machines/<slug>/` 的 `index.html`（各自带骨架：style + canvas；
- *     `ported` 是上游逐字抽取、`machines` 自维护，但 SEO 都在产出后统一注入，不在这里手改）
+ *     `ported` 是上游逐字抽取（禁止手改，会被 sync 覆盖）、`machines` 自维护可手改，但 SEO 都在产出后统一注入）
  *
- * 第三种的「禁止手改」是硬约束（会被 `npm run sync:upstream` 覆盖），所以 SEO 只能
+ * 第三种里 `ported` 的「禁止手改」是硬约束（会被 `npm run sync:upstream` 覆盖），`machines` 虽可手改
+ * 但 SEO 同样统一在产出后注入，所以 SEO 只能
  * **产出之后**统一追加。好处顺带把前两种也覆盖了：加新游戏自动有 SEO，不用记着配。
  *
  * ## 时机：必须在 html-webpack-plugin 之后
@@ -278,7 +279,7 @@ module.exports = (env, argv) => {
     throw new Error(`页面元数据有问题，先修好再构建：\n  - ${scanErrors.join('\n  - ')}`);
   }
   const games = pages.filter((p) => p.partition === 'games');
-  // 整机分区（ported = 上游逐字移植的 arcade；machines = 自维护的 windows-xp 等）都自带
+  // 整机分区（ported = 上游逐字移植的整机，当前无页；machines = 自维护的整机（windows-xp / arcade））都自带
   // index.html 骨架（style + canvas），不套小游戏共用模板，走同一段 HtmlWebpackPlugin 生成。
   const machinePartitions = ['ported', 'machines'];
   const ported = pages.filter((p) => machinePartitions.includes(p.partition));

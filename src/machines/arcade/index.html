@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>ICE Arcade</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>" />
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      /* 掌机在页面居中：body flex 居中。画布按 1.475 比例（1180×800）铺满视口后，
+         剩余边距是背景渐变（与掌机外壳外圈一致），看起来就像"居中摆放的一台掌机"。 */
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 24%, #1b2130 0%, #080a0f 72%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+      /* 画布内部坐标系固定 1180×800（见 main.ts），这里只缩放**显示尺寸**：用 min()
+         让画布取到"刚好塞进视口、且保持 1.475 比例"的最大矩形，并交给 body 的 flex 居中。
+         这样：
+           · 视口比例 = 1.475 时画布**占满整页**；
+           · 比例不符时画布占满较窄的那一边、另一边居中（黑边），不会变形、也不会被裁切。
+         注意：引擎按 getBoundingClientRect 把点击映射到内部坐标，缓冲!=显示时（字母边缩放）
+         会错位 —— 这一点由 main.ts 的 applyLayout() 用 viewport.scale 同步修正（同 windows-xp）。 */
+      width: min(100vw, 100vh * 1.475);
+      height: min(100vh, 100vw / 1.475);
+    }
+  </style>
+  <body>
+    <canvas id="canvas" width="1180" height="800"></canvas>
+
+    <!--
+      入口脚本由 html-webpack-plugin 注入。上游页在这里的两行
+        <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+        <script src="../dist/index.umd.js"></script>
+      在本工程里不再需要：引擎与组件库改由 main.ts 从 node_modules 引，
+      webpack 的 resolve.alias 保证全工程只有一份 ice-render（见 webpack.config.js）。
+
+      注意：本页已收归 `src/machines/arcade/` 自维护（见 main.ts 头注释），
+      **不再**由 scripts/sync-upstream.mjs 生成；改玩法直接改 main.ts，改版式（居中 / 字母边）改本文件即可。
+    -->
+  </body>
+</html>

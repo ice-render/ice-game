@@ -1,15 +1,22 @@
 // @ts-nocheck
 /**
- * ⚠️ 生成物，禁止手改：正文由 `scripts/sync-upstream.mjs` 从
- *    `../ice-web-components/examples/arcade.html` 的内联 <script> 正文**逐字**抽取。
- *    要改玩法请改上游页，然后 `npm run sync:upstream`。
+ * **自维护源码（可手改）**：本文件已从 `scripts/sync-upstream.mjs` 的抽取链路中迁出，
+ * 收归 `src/machines/arcade/` 由 ice-game 自己维护，不再被 `npm run sync:upstream` 覆盖。
  *
- * 与上游页的唯一差异 = 下面两行 import：上游靠 <script src="…umd.js"> 把 `ICE` / `ICEWEB`
+ * 来历：最初由 `sync-upstream` 从 `../ice-web-components/examples/arcade.html` 的内联
+ * `<script>` 正文**逐字**抽取。迁出后，这份 `main.ts` 就是真相来源，要改玩法**直接改这里**即可，
+ * 不用回头改上游。
+ *
+ * 与上游页的唯一差异 = 下面两行 import：上游靠 `<script src="…umd.js">` 把 `ICE` / `ICEWEB`
  * 挂在 window 上，这里改成模块引入 —— `import * as` 拿到的命名空间对象与 UMD 全局**形状一致**
  * （`ICE.ICE`、`ICE.ICEBoxLayout`、`ICEWEB.ICEPanel` 照旧），所以正文一字不用改。
  *
  * 类型检查用 `@ts-nocheck` 关掉：这是上游的 JS 正文，"保持逐字"比"通过 strict 检查"重要。
  * 本仓的类型门禁落在 `src/domain`（纯逻辑）与 `src/home`（自己写的画布首页）上。
+ *
+ * 页面层适配（2026-09-15）：本页画布需要「字母边 + 居中」（见 index.html），与 windows-xp
+ * 同款根因与修复 —— `applyLayout()` 让缓冲跟随显示并用 `viewport.scale` 同步设计世界，详见
+ * IIFE 末尾的 `applyLayout` 实现与 `src/machines/windows-xp/main.ts` 的注释。
  */
 import * as ICE from 'ice-render';
 import * as ICEWEB from 'ice-web-components';
@@ -2240,5 +2247,41 @@ import * as ICEWEB from 'ice-web-components';
           refreshBios();
         });
         showBios();
+
+        /**
+         * ★ 字母边（letterbox）+ 居中下点击错位修复（2026-09-15，同 windows-xp）
+         *
+         * 根因：本页画布缓冲固定 1180×800（设计分辨率），但 index.html 用 CSS 把「显示尺寸」等比缩成
+         * 视口内 1.475 矩形（字母边），再让 body flex 居中。引擎的点击映射是 `clientX - rect.left`
+         * （CSS 像素）直接当世界坐标用（见 ice-render/src/event/input-normalize.ts），前提是「缓冲 == 显示尺寸」。
+         * 字母边下缓冲(1180) ≠ 显示（如 1000），于是点哪偏哪。
+         *
+         * 修复（不动引擎源码，符合 ice-render 铁律）：让画布缓冲**始终等于显示尺寸**
+         * （fitCanvasToDisplaySize 已含 dpr），再用引擎视口把 1180×800 设计世界等比缩放进缓冲。
+         * 这样点击 CSS 像素与缓冲 1:1，screenToWorld 再逆变换回设计坐标，命中正确。显示尺寸的数学
+         * 与 index.html 的 CSS min() 完全一致。
+         */
+        const DESIGN_W = 1180;
+        const DESIGN_H = 800;
+        const DESIGN_ASPECT = DESIGN_W / DESIGN_H; // 1.475
+        const applyLayout = () => {
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          // 取「塞进视口且保持 1.475 比例」的最大矩形（与 index.html 的 CSS min() 同一条数学）
+          const boxW = Math.min(vw, vh * DESIGN_ASPECT);
+          const boxH = boxW / DESIGN_ASPECT;
+          ice.fitCanvasToDisplaySize(boxW, boxH);
+          // 把 1180×800 设计世界等比缩放进缓冲；screenToWorld 会逆变换回设计坐标
+          ice.viewport.scale = boxW / DESIGN_W;
+          ice.viewport.tx = 0;
+          ice.viewport.ty = 0;
+          ice.dirty = true; // 触发整帧重绘（视口变化也会让静态层缓存失效）
+        };
+        applyLayout();
+        let __layoutRaf = 0;
+        window.addEventListener('resize', () => {
+          if (__layoutRaf) cancelAnimationFrame(__layoutRaf);
+          __layoutRaf = requestAnimationFrame(applyLayout);
+        });
       })();
     

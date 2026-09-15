@@ -3,7 +3,7 @@ import { findPage } from '../src/domain/catalog';
 import { RECT_HELPER, clickCanvas, collectErrors, expectCanvasPainted, expectLayoutClean } from './support';
 
 /**
- * 掌机页（`src/games/arcade`，从上游 `ice-web-components/examples/arcade.html` 逐字抽取）。
+ * 掌机页（`src/machines/arcade`，最早从上游 `ice-web-components/examples/arcade.html` 逐字抽取、现已自维护）。
  *
  * 断言分三层，缺一层就会出现"看起来通过其实没验证"：
  *  1) 像素：自检画面真的画出来了；
@@ -102,4 +102,35 @@ test.describe('ICE Arcade 掌机', () => {
 
     expect(errors).toEqual([]);
   });
+});
+
+/**
+ * 掌机居中回归：页面层 body flex 居中 + 字母边（letterbox）缩放后，画布应**始终居中**
+ * 于视口（任意比例都不贴边、不被裁切）。这是 2026-09-15 把 arcade 从 `src/ported/` 迁到
+ * `src/machines/` 并加居中样式的核心诉求。
+ */
+test.describe('掌机居中（字母边 + flex 居中）', () => {
+  for (const [vw, vh] of [
+    [1440, 900],
+    [1280, 900],
+    [1024, 768],
+    [800, 1200],
+  ] as const) {
+    test(`${vw}x${vh} 掌机在页面居中`, async ({ page }) => {
+      await page.setViewportSize({ width: vw, height: vh });
+      const errors = collectErrors(page);
+      await page.goto('/arcade.html');
+      await page.waitForFunction(() => Boolean((window as any).__arcade));
+
+      const box = await page.locator('#canvas').boundingBox();
+      expect(box, '画布没有布局盒子').not.toBeNull();
+      const cx = box!.x + box!.width / 2;
+      const cy = box!.y + box!.height / 2;
+      // 居中误差 < 2px（浮点 + 字母边取整允许的余量）
+      expect(Math.abs(cx - vw / 2), `水平未居中：中心 x=${cx} 期望 ${vw / 2}`).toBeLessThan(2);
+      expect(Math.abs(cy - vh / 2), `垂直未居中：中心 y=${cy} 期望 ${vh / 2}`).toBeLessThan(2);
+
+      expect(errors).toEqual([]);
+    });
+  }
 });
