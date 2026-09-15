@@ -21,6 +21,7 @@ import { scanAll } from './lib/scan-games.cjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const OUT_FILE = path.join(ROOT, 'src', 'domain', 'catalog.generated.json');
+const COVERS_DIR = path.join(ROOT, 'src', 'home', 'covers');
 
 const check = process.argv.includes('--check');
 
@@ -33,8 +34,14 @@ if (errors.length) {
   process.exit(1);
 }
 
-// 只把**界面需要**的字段写进生成物：构建细节（目录/入口）不进这里，
-// 免得生成物变成第二份"构建配置"，改一个字段要动两个地方。
+/**
+ * 只把**界面需要**的字段写进生成物：构建细节（目录/入口）不进这里，
+ * 免得生成物变成第二份"构建配置"，改一个字段要动两个地方。
+ *
+ * `cover` 是"有没有封面图"的标记：首页据此决定画封面还是画占位块。
+ * 在这里（而不是运行时 fetch）判断，是因为构建期就知道结果 ——
+ * 顺带让 `check:covers` 能在构建前提醒"还有游戏没封面"。
+ */
 const payload = {
   pages: items.map((item) => ({
     slug: item.slug,
@@ -45,6 +52,7 @@ const payload = {
     features: item.meta.features,
     controls: item.meta.controls,
     page: item.page,
+    cover: fs.existsSync(path.join(COVERS_DIR, `${item.slug}.png`)),
   })),
 };
 
@@ -75,6 +83,12 @@ if (skipped.length) {
 
 if (!check) {
   for (const page of payload.pages) {
-    console.log(`  ${page.page.padEnd(18)} [${page.kind.padEnd(7)}] ${page.title}`);
+    const cover = page.cover ? '有封面' : '无封面';
+    console.log(`  ${page.page.padEnd(18)} [${page.kind.padEnd(7)}] ${cover}  ${page.title}`);
+  }
+  const missing = payload.pages.filter((page) => !page.cover);
+  if (missing.length) {
+    console.log(`\n提醒：${missing.length} 个页面还没有封面图（首页会显示占位块）。`);
+    console.log('      跑 `npm run covers` 自动抓取（需要先 npm run build）。');
   }
 }

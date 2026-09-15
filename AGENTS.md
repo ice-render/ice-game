@@ -35,6 +35,9 @@ src/
 │  └─ main.ts           ← 生成物，禁手改
 ├─ templates/page.html  小游戏共用页面骨架（HTML 只写一份）
 └─ home/               游戏厅首页（目录驱动）
+   ├─ main.ts            封面卡片网格（网格换行 + 分组）
+   ├─ index.html         首页骨架（唯一允许纵向滚动的页面）
+   └─ covers/<slug>.png  ← 生成物（npm run covers 自动抓，勿手改）
 ```
 
 ## 铁律
@@ -113,7 +116,16 @@ src/
 引擎的文本渲染走 canvas `fillText`，彩色 emoji 会渲染成怪符号（实测一个方框加乱码）。
 中英文、数字、`←→` 这类符号都没问题（`kit/shell` 的音效按钮就因为踩过这个，从 `🔊` 改成了文字）。
 
-### 7. 游戏规则必须是**零运行时依赖的纯逻辑**
+### 7. 事件载荷的形状**别猜**：`trigger(name, originalEvent, param)` → 读 `evt.param`
+
+`ICEWidget.setHovered()` 调的是 `this.trigger('hoverchange', null, { hovered })`，
+而 `trigger(eventName, originalEvent, param)` 把数据塞进 **`evt.param`**。
+所以 handler 收到的是 `ICEEvent`，要读 `evt.param.hovered` ——
+直接读 `payload.hovered` 恒为 `undefined`（实测：悬停高亮框永远不显示，**且没有任何报错**）。
+
+凡是"注册了回调但看起来没触发"的情况，先确认载荷形状；`ICEEventTarget.trigger` 的签名是唯一依据。
+
+### 8. 游戏规则必须是**零运行时依赖的纯逻辑**
 
 `model.ts` 不 import 引擎、不碰 DOM。好处：规则能在 node 里单测（`npm test` 0.2 秒跑完），
 不需要浏览器、不需要引擎产物。`main.ts` 只负责装配与画面 —— 这条分界是单测跑得快的前提。
@@ -125,10 +137,11 @@ npm run types:check   # tsc --noEmit（含 kit、games、e2e、跨包类型接�
 npm test              # jest：domain / kit / 各游戏的 model（不需要引擎产物、不需要 jsdom）
 npm run check:wiring  # 家族三件套接线：真打一次包，断言每个包只进来一份
 npm run check:catalog # 目录生成物是否最新（改了 meta.json 忘了生成会红）
-npm run build         # 扫目录构建（会自动先跑 gen:catalog）
-npm run check:games   # 目录 ↔ 生成物 ↔ 构建产物 三者一致（build 之后跑）
+npm run build         # 扫目录构建（自动 gen:catalog；顺带把封面拷进 dist/covers/）
+npm run check:games   # 目录 ↔ 生成物 ↔ 构建产物 ↔ 封面 四者一致（build 之后跑）
 npm run test:e2e      # 真 Chrome：像素 + 真鼠标真键盘 + 目录驱动逐页冒烟
 npm run verify        # 上面除 e2e 外全部
+npm run covers        # 抓首页卡片封面（真跑一遍游戏；改了画面就重跑）
 ```
 
 e2e 的判据分三层（**缺一层就会出现"看起来通过其实没验证"**）：

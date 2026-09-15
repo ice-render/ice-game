@@ -25,7 +25,8 @@
           "重新开始"
         ]
       ],
-      "page": "breakout.html"
+      "page": "breakout.html",
+      "cover": true
     },
     {
       "slug": "arcade",
@@ -57,7 +58,8 @@
           "回到 BIOS 菜单"
         ]
       ],
-      "page": "arcade.html"
+      "page": "arcade.html",
+      "cover": true
     },
     {
       "slug": "windows-xp",
@@ -93,7 +95,8 @@
           "插旗 / 问号"
         ]
       ],
-      "page": "windows-xp.html"
+      "page": "windows-xp.html",
+      "cover": true
     }
   ]
 }

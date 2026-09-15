@@ -364,6 +364,12 @@ const debugHandle = {
   togglePause,
   restart,
   render,
+  /**
+   * 手动把 model 状态同步到外壳（收起/显示覆盖层 + 刷新状态文字）。
+   * 对外暴露是因为**改动 model 后不一定有相位跳变**：循环只在相位变化时自动同步，
+   * 而封面抓取 / e2e 会直接改 model（如 `launch()`），此时覆盖层还停在"待发球"。
+   */
+  syncShell,
 };
 (window as any).__game = debugHandle;
 (window as any).__breakout = debugHandle;

@@ -33,6 +33,13 @@ export interface GamePage {
   controls: [string, string][];
   /** 产物页面文件名（相对 `dist/` 根）。 */
   page: string;
+  /**
+   * 有没有封面图（`covers/<slug>.png`，由 `npm run covers` 自动抓取）。
+   *
+   * 由 `gen:catalog` 在构建前检查文件是否存在得出 —— 所以**构建期就知道**，
+   * 首页不用去 fetch 探测。没有封面时首页画占位块（不至于开天窗）。
+   */
+  cover: boolean;
 }
 
 /**
@@ -94,4 +101,19 @@ export function stats(): { games: number; machines: number; features: number } {
 /** 入口页清单（相对 `dist/` 根），供构建校验与 e2e 逐页访问。 */
 export function entryPages(): string[] {
   return PAGES.map((page) => page.page);
+}
+
+/**
+ * 封面的站内路径（相对 HTML，因此 `file://` 下也能用）。
+ *
+ * 只对 `cover === true` 的页返回；调用方（首页）据此决定画封面还是占位块。
+ * 路径与 `webpack.config.js` 的 `CopyCoversPlugin` 约定一致（`dist/covers/<slug>.png`）。
+ */
+export function coverUrl(page: GamePage): string | null {
+  return page.cover ? `covers/${page.slug}.png` : null;
+}
+
+/** 缺封面的页面 slug（首页与门禁都用它提醒）。 */
+export function pagesMissingCover(): string[] {
+  return PAGES.filter((page) => !page.cover).map((page) => page.slug);
 }

@@ -94,7 +94,7 @@ test.describe('游戏厅首页', () => {
       expect(rect.top + rect.height, `${rect.slug} 越出下边界`).toBeLessThanOrEqual(canvasHeight);
     }
 
-    // 两两不相交（同日发现的重叠问题：网格行高算错会让上下两行压在一起）
+    // 两两不相交（网格行高算错会让上下两行压在一起）
     for (let i = 0; i < rects.length; i += 1) {
       for (let j = i + 1; j < rects.length; j += 1) {
         const a = rects[i];
@@ -105,6 +105,62 @@ test.describe('游戏厅首页', () => {
         expect(overlaps, `${a.slug} 与 ${b.slug} 重叠`).toBe(false);
       }
     }
+  });
+
+  test('卡片带封面：有封面的页面真的加载了图，没有的回退到占位块', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    // 图片是异步加载的，等画布重新画过（ImageCache 的 onload 会置脏）
+    await page.waitForTimeout(800);
+
+    const info = await page.evaluate(() => {
+      const home = (window as any).__gameHome;
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      return {
+        // 统一句柄约定：卡片节点里有 `game-cover-<slug>` 就是加载了封面
+        withCoverNode: home.pages.filter((p: any) => home.find(`game-cover-${p.slug}`)).map((p: any) => p.slug),
+        // 目录里标记有封面的
+        markedCover: home.pages.filter((p: any) => p.cover).map((p: any) => p.slug),
+        missing: home.missingCovers,
+        canvasNonEmpty: canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data.some((v, i) => i % 4 === 3 && v >= 8),
+      };
+    });
+
+    // 目录标记与画布上的节点必须一一对应（标记说有、节点没有 = 封面没画上去）
+    expect(info.withCoverNode.sort()).toEqual(info.markedCover.sort());
+    expect(info.canvasNonEmpty).toBe(true);
+    // ⚠️ 缺封面**不是错误**：新游戏天然没有封面，首页会用占位块并在底部提示
+    expect(Array.isArray(info.missing)).toBe(true);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('鼠标悬停卡片会显示高亮框（kit 的 hoverchange 接线）', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+
+    const slug = PAGES[0].slug;
+    const before = await page.evaluate(
+      (key) => (window as any).__gameHome.nodes[key].frame.state.display,
+      slug,
+    );
+    expect(before, '悬停框初始应当隐藏').toBe(false);
+
+    // 真鼠标移到卡片中心：ICEHoverManager 应派发 hoverchange → 高亮框显示
+    const rect = await page.evaluate(
+      (key) => (window as any).__gameHome.worldRect((window as any).__gameHome.nodes[key].card),
+      slug,
+    );
+    const point = await canvasPoint(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    await page.mouse.move(point.x, point.y);
+    await page.waitForTimeout(300);
+
+    const after = await page.evaluate(
+      (key) => (window as any).__gameHome.nodes[key].frame.state.display,
+      slug,
+    );
+    expect(after, '鼠标悬停后高亮框应当显示').toBe(true);
   });
 
   test('目录里的每个 kind 都能在首页找到对应分组的卡片', async ({ page }) => {

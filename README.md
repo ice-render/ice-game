@@ -16,9 +16,9 @@
 |---|---|---|
 | **打砖块** | `breakout.html` | 挡板接球、清空砖块；掉球扣命，三命用完结束；越靠上的砖越值钱 |
 
-| 待发球 | 进行中（130 分） |
+| 打砖块 · 进行中 | 打砖块 · 游戏结束 |
 |---|---|
-| ![打砖块 · 待发球](screenshots/breakout-ready.png) | ![打砖块 · 进行中](screenshots/breakout-playing.png) |
+| ![打砖块 · 进行中](screenshots/breakout-playing.png) | ![打砖块 · 待发球](screenshots/breakout-ready.png) |
 
 **整机展厅**（`src/ported/<slug>/`，从 `ice-web-components/examples/` 移植）：
 
@@ -26,6 +26,9 @@
 |---|---|---|
 | **ICE Arcade 掌机** | `arcade.html` | 开机先跑 BIOS 自检（CPU / RAM / VRAM / SOUND / CART），再过启动菜单插卡带。四张卡带：俄罗斯方块、贪吃蛇、2048、CHIP-8 |
 | **Windows XP 桌面** | `windows-xp.html` | 一台**会开机**的桌面：黑屏自检 → 蓝色欢迎屏 → 桌面淡入 + 开机音。八个程序：扫雷、ICE Arcade、记事本、画图、我的电脑、我的文档、Internet Explorer、显示属性 |
+
+> 首页每张卡片上的**封面图是自动抓的真实画面**（`npm run covers`），不是手工准备的图片 ——
+> 见第 5 节。改了游戏画面重跑一次即可，封面不会和代码脱节。
 
 | 掌机 · 俄罗斯方块 | 掌机 · BIOS 自检 |
 |---|---|
@@ -114,10 +117,11 @@ npm run types:check   # tsc --noEmit（含 kit、games、e2e、跨包类型接�
 npm test              # jest：domain / kit / 各游戏 model —— 不需要引擎产物也不需要 jsdom
 npm run check:wiring  # 家族三件套接线：真打一次包，断言每个包只进来一份
 npm run check:catalog # 目录生成物是否最新
-npm run build         # 扫目录构建
-npm run check:games   # 目录 ↔ 生成物 ↔ 构建产物 三者一致
+npm run build         # 扫目录构建（会把封面拷进 dist/covers/）
+npm run check:games   # 目录 ↔ 生成物 ↔ 构建产物 ↔ 封面 四者一致
 npm run test:e2e      # 真 Chrome：像素 + 真鼠标真键盘 + 逐页冒烟
 npm run verify        # 上面除 e2e 外全部
+npm run covers        # 抓卡片封面（真跑一遍游戏，见下）
 npm run screenshots   # 重抓 README 的截图（改过版面就要重跑，别手截）
 ```
 
@@ -126,6 +130,23 @@ npm run screenshots   # 重抓 README 的截图（改过版面就要重跑，别
 1. **状态机**：直接断言 `model` 的相位 / 分数 / 命数；
 2. **交互**：真鼠标点画布控件、真键盘驱动输入 —— 断言状态真的变了；
 3. **像素**：`opaqueRatio` + `inkRatio` + 颜色数（只刷一层底色的空画布会在后两项露馅）。
+
+### 卡片封面：自动抓，不手工准备
+
+```bash
+npm run build && npm run covers          # 全部页面
+npm run covers -- breakout              # 只重拍某个（改了一个游戏时省时间）
+```
+
+`scripts/shoot-covers.mjs` 用真 Chrome 打开每个页面、**驱动它到有内容的状态**
+（打砖块要打到有分数、XP 要开机并开一个窗口）、再把画布合成为 16:9 的封面：
+
+- 圆角 / accent 描边 / 顶部光泽都**烘进 PNG**（引擎的 `ICEImage` 不支持圆角裁剪，
+  离屏画布的 `clip()` 可以 —— 所以圆角只能在生成时做）；
+- 每个页面的"摆姿势"与"取景"写在脚本的 `DRIVERS` 里，**不是必须的**：
+  没登记的页面走默认（等它画完 + 整张画布），所以新游戏天然就有封面；
+- 缺封面**不算错误**：首页画占位块并在底部提示跑 `npm run covers`；
+  真正会被门禁拦下的是**不一致**（生成物说有封面、`dist/covers/` 里却没有）。
 
 ## 6. 依赖
 

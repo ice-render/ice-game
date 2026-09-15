@@ -24,7 +24,8 @@
     "test": "jest --runInBand",
     "test:e2e": "npm run build && playwright test",
     "screenshots": "node scripts/shoot-screenshots.mjs",
-    "verify": "npm run types:check && npm test && npm run check:wiring && npm run check:catalog && npm run build && npm run check:games"
+    "verify": "npm run types:check && npm test && npm run check:wiring && npm run check:catalog && npm run build && npm run check:games",
+    "covers": "node scripts/shoot-covers.mjs"
   },
   "dependencies": {
     "@damoqiongqiu/ice-chart": "file:../ice-chart",

@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { buildMarkers, collectCopies, findDuplicates, describeDuplicates } = require('./scripts/lib/family-guard.cjs');
 const { scanAll } = require('./scripts/lib/scan-games.cjs');
@@ -119,6 +120,34 @@ class SingleEnginePlugin {
   }
 }
 
+/**
+ * 把首页的卡片封面（`src/home/covers/*.png`）原样拷进 `dist/covers/`。
+ *
+ * 为什么不走 `import cover from './covers/x.png'`（asset modules）：
+ * 那样**每加一个游戏都得改 import 列表**，正好破坏了本仓"目录驱动、加游戏不改配置"的约定。
+ * 封面是"有就用、没有就退回占位块"的可选资源，用**稳定路径**（`covers/<slug>.png`）加载最简单：
+ * - 首页按 `src/domain/catalog.generated.json` 里的 `cover` 标记决定加载还是占位；
+ * - 那个标记由 `gen-catalog` 检查文件是否存在得出（构建前置自动跑），所以不会有"标记说有、文件没有"。
+ * 顺带：不经 webpack 处理就没有 contenthash，但封面本来就不需要缓存失效策略（本地演示站）。
+ */
+class CopyCoversPlugin {
+  apply(compiler) {
+    compiler.hooks.thisCompilation.tap('CopyCoversPlugin', (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name: 'CopyCoversPlugin', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+        () => {
+          const dir = path.join(__dirname, 'src', 'home', 'covers');
+          if (!fs.existsSync(dir)) return;
+          for (const name of fs.readdirSync(dir)) {
+            if (!name.endsWith('.png')) continue;
+            compilation.emitAsset(`covers/${name}`, new compiler.webpack.sources.RawSource(fs.readFileSync(path.join(dir, name))));
+          }
+        },
+      );
+    });
+  }
+}
+
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
@@ -182,6 +211,8 @@ module.exports = (env, argv) => {
     plugins: [
       // 构建期断言"每个家族包只进来一份产物"（多份引擎 = 组件静默画不出来）
       new SingleEnginePlugin(),
+      // 首页卡片封面：原样拷进 dist/covers/（稳定路径，加游戏不用改配置）
+      new CopyCoversPlugin(),
       // 游戏厅首页（自己写的骨架）
       new HtmlWebpackPlugin({ template: 'src/home/index.html', filename: 'index.html', chunks: ['home'] }),
       // 自研小游戏：共用模板 + meta.json 注入
