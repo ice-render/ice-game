@@ -58,7 +58,21 @@ async function shoot(page, name, canvasId = 'canvas') {
 }
 
 /**
- * 截**视口**（用户实际看到的画面，含固定定位的吸顶导航）。
+ * 截页面上的**一块区域**（文档坐标）。
+ *
+ * 用途：精选展厅（`ICECarousel`）是主体画布里的一段，`#canvas` 整张截下来时它只占一小条；
+ * 而要讲"这一块是家族组件搭的"就得单独给一张。裁剪区由调用方按 `getBoundingClientRect` 给，
+ * 不写死像素 —— 版面改了截图跟着走。
+ */
+async function shootRegion(page, name, rect) {
+  const file = path.join(OUT, `${name}.png`);
+  await page.screenshot({ path: file, clip: rect });
+  const { size } = fs.statSync(file);
+  console.log(`  ${name.padEnd(22)} ${(size / 1024).toFixed(0)} KB  (区域)`);
+}
+
+/**
+ * 截**视口**（用户实际看到的画面，含固定定位的吸顶导航与背后固定的效果层）。
  *
  * 为什么不用 `fullPage: true`：整页截图在 Chrome 里对 `position: fixed` 元素有渲染偏差 ——
  * 它把 fixed 元素画在顶部一次，于是会**压在正文之上**（实测看起来像"导航盖住了 hero"，
@@ -94,16 +108,47 @@ async function main() {
   console.log('抓取截图：');
 
   // 游戏厅首页：
-  //  · home-hero    —— 视口截图（打开页面时看到的：吸顶导航 + hero + 第一行卡片）
-  //  · home         —— 主体画布本身（完整内容：卡片网格 + 页脚，不含固定的导航）
-  //  · home-navbar  —— 导航条单独一张（1180×60，用于文档里说明它的构成）
-  //  · home-footer  —— 滚到底的视口截图（页脚与家族链接）
+  //  · home-hero      —— 视口截图（打开页面时看到的：吸顶导航 + hero + 精选展厅）
+  //  · home-featured  —— 精选展厅那一块单独一张（`ICECarousel`，区域截图）
+  //  · home           —— 主体画布本身（完整内容：卡片网格 + 页脚，不含固定的导航）
+  //  · home-navbar    —— 导航条单独一张（用于文档里说明它的构成）
+  //  · home-footer    —— 滚到底的视口截图（页脚与家族链接）
   await page.goto(`${BASE}/index.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => Boolean(window.__gameHome));
+  /*
+   * 先把轮播按停、并回到第 0 张。
+   *
+   * 它默认每 5.2s 自动切一张 —— 不按停的话每张截图都停在不同的幻灯片上，
+   * README 里那几张图会互相矛盾（而且同一次运行的两张图都可能不一致）。
+   * 动画本身有 e2e 专门验，截图这里只要确定性。
+   */
+  await page.evaluate(() => {
+    const home = window.__gameHome;
+    if (home && home.carousel) {
+      home.carousel.handle.pause();
+      home.carousel.goTo(0, false);
+    }
+  });
   await wait(700);
   await page.evaluate(() => window.scrollTo(0, 0));
   await wait(300);
   await shootViewport(page, 'home-hero');
+
+  // 精选展厅：按元素在**文档里**的位置裁一块（`#canvas` 在文档里往下偏了一段）
+  const featuredRect = await page.evaluate(() => {
+    const node = window.__gameHome.find('featured-carousel');
+    const card = document.getElementById('canvas').getBoundingClientRect();
+    const box = window.__gameHome.worldRect(node);
+    const scale = card.width / document.getElementById('canvas').width;
+    return {
+      x: Math.round(card.left + box.left * scale),
+      y: Math.round(card.top + window.scrollY + box.top * scale),
+      width: Math.round(box.width * scale),
+      height: Math.round(box.height * scale),
+    };
+  });
+  await shootRegion(page, 'home-featured', featuredRect);
+
   await shoot(page, 'home');
   await shoot(page, 'home-navbar', 'navbar');
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

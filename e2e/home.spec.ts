@@ -2,12 +2,15 @@ import { expect, test } from '@playwright/test';
 import { PAGES, entryPages, findPage, stats } from '../src/domain/catalog';
 import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO } from '../src/domain/family-repos';
 import {
+  DEFAULT_ALLOW_ID_PREFIXES,
+  EFFECTS_CANVAS,
   NAVBAR_CANVAS,
   canvasPoint,
   clickCanvas,
   collectErrors,
   expectCanvasPainted,
   expectLayoutClean,
+  scrollCanvasPointIntoView,
 } from './support';
 
 /**
@@ -56,6 +59,15 @@ test.describe('游戏厅首页', () => {
         (key) => (window as any).__gameHome.worldRect((window as any).__gameHome.nodes[key].button),
         slug,
       );
+      /*
+       * 先滚进视口再点。
+       *
+       * 实测：**视口外的点击仍然生效**（文档 y=1377、视口 900 高时照样精确命中），
+       * 所以不滚也能过 —— 但那依赖 CDP 对越界坐标的处理方式，是 Playwright/Chrome 的
+       * 内部行为而不是本仓的契约。真实用户也只能点他**看得见**的东西，
+       * 所以这里统一滚进视口（顺带让 helper 里那道"目标必须在视口内"的断言保护这条用例）。
+       */
+      await scrollCanvasPointIntoView(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
       await clickCanvas(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
 
       await page.waitForURL(new RegExp(`${slug}\\.html$`));
@@ -69,10 +81,11 @@ test.describe('游戏厅首页', () => {
     await page.goto('/');
     await page.waitForFunction(() => Boolean((window as any).__gameHome));
 
-    // 卡片正文上的 chip 是非交互的，点击会冒泡到卡片本身 —— 这是有意的
+    // 卡片正文上的标签是非交互的，点击会冒泡到卡片本身 —— 这是有意的
     const rect = await page.evaluate(() =>
       (window as any).__gameHome.worldRect((window as any).__gameHome.nodes['windows-xp'].card),
     );
+    await scrollCanvasPointIntoView(page, rect.left + 200, rect.top + 120);
     const point = await canvasPoint(page, rect.left + 200, rect.top + 120);
     await page.mouse.click(point.x, point.y);
 
@@ -155,11 +168,21 @@ test.describe('游戏厅首页', () => {
     );
     expect(before, '悬停框初始应当隐藏').toBe(false);
 
-    // 真鼠标移到卡片中心：ICEHoverManager 应派发 hoverchange → 高亮框显示
     const rect = await page.evaluate(
       (key) => (window as any).__gameHome.worldRect((window as any).__gameHome.nodes[key].card),
       slug,
     );
+
+    /*
+     * ⚠️ 必须先把它滚进视口再 hover。
+     *
+     * 首页在 hero + 精选展厅之后，第一张卡片的中心已经落在 `y≈1005`（视口只有 900）——
+     * 而**视口外的 `page.mouse.move` 会被浏览器直接忽略**（实测），hover 永远不触发，
+     * 用例会静默失效。helper 里带断言，将来版面再变高会立刻报错。
+     */
+    await scrollCanvasPointIntoView(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+    // 真鼠标移到卡片中心：ICEHoverManager 应派发 hoverchange → 高亮框显示
     const point = await canvasPoint(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
     await page.mouse.move(point.x, point.y);
     await page.waitForTimeout(300);
@@ -183,24 +206,89 @@ test.describe('游戏厅首页', () => {
     expect(findPage('breakout')?.kind).toBe('game');
   });
 
-  test('版面体检：首页主体与吸顶导航两块画布都无越界、无构件交叠', async ({ page }) => {
+  test('版面体检：主体 / 吸顶导航 / 背景效果层三块画布都无越界、无构件交叠', async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto('/');
     await page.waitForFunction(() => Boolean((window as any).__gameHome));
     await page.waitForTimeout(700);
 
-    // ① 主体画布：卡片网格 + 页脚（页脚含多栏链接，最容易排歪）
-    await expectLayoutClean(page);
+    /*
+     * 各页自己声明的"点名排除的 id 前缀"从页面读，不在测试里写死。
+     *
+     * 现在只用在一个地方：**精选展厅**（`featured-*`）。`ICECarousel` 的轨道宽 = 幻灯片数
+     * × 视口宽，第 2 张起在画布坐标系里本来就落在视口右侧之外（由 `clipChildren` 裁掉），
+     * 体检的越界检查会遍历全部节点 → 不排除就是一串假越界。
+     * 这是组件的设计（裁剪视口 + 溢出轨道），不是版面错乱。
+     */
+    const allowIdPrefixes = await page.evaluate(() => (window as any).__gameHome.auditAllowIdPrefixes);
 
-    // ② 吸顶导航画布：品牌 + 锚点 + 外链挤在 60px 高的一条里，宽度算错就会互相压住。
+    // ① 主体画布：hero / 轮播 / 卡片网格 / 页脚（页脚含多栏链接，最容易排歪）
+    await expectLayoutClean(page, { allowIdPrefixes: [...DEFAULT_ALLOW_ID_PREFIXES, ...allowIdPrefixes] });
+
+    // ② 吸顶导航画布：品牌 + 锚点 + 外链挤在 64px 高的一条里，宽度算错就会互相压住。
     //
     // 两个必须说清的参数：
     //  · `iceSource: 'navbar'` —— 导航是**独立 ICE 实例**，必须和它自己的画布成对取，
-    //    否则会拿主画布的节点去比 60px 的高度，满屏假越界；
+    //    否则会拿主画布的节点去比 64px 的高度，满屏假越界；
     //  · `tolerancePx: bleed` —— 导航背景条**有意**上移 `radius` 像素（让顶部方角、
     //    底部圆角），那是设计出血、会超出画布上边。数值从页面读，不在测试里写死。
     const bleed = await page.evaluate(() => (window as any).__gameHome.navbar.bleed);
     await expectLayoutClean(page, { canvasId: NAVBAR_CANVAS, iceSource: 'navbar', tolerancePx: bleed });
+
+    // ③ 背景效果层：粒子/光斑铺满整块画布，任何构件越出都会被静默裁掉（同样是独立实例）
+    await expectLayoutClean(page, { canvasId: EFFECTS_CANVAS, iceSource: 'bg' });
+
+    expect(errors).toEqual([]);
+  });
+
+  test('背景效果层：粒子真的在动，且尊重"减少动态效果"', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(300);
+
+    const first = await page.evaluate(() => {
+      const fx = (window as any).__gameHome.effects;
+      return { particles: fx.particles(), frames: fx.frames(), size: fx.size(), paused: fx.paused() };
+    });
+    expect(first.particles, '粒子数应当按视口面积给（太少就没氛围）').toBeGreaterThan(20);
+    expect(first.size).toMatch(/^1180×\d+$/);
+
+    // 光靠"有粒子"不够：得证明它**每帧都在推进**（不然就是一张静态图）
+    await page.waitForTimeout(500);
+    const second = await page.evaluate(() => (window as any).__gameHome.effects.frames());
+    if (!first.paused) {
+      expect(second, '效果层应当持续推进帧').toBeGreaterThan(first.frames);
+    }
+
+    // 它自己那块画布也真的画了东西（透明画布 + 少量粒子，阈值要压低）
+    await expectCanvasPainted(page, 0.001, { minOpaque: 0.001, canvasId: EFFECTS_CANVAS });
+
+    expect(errors).toEqual([]);
+  });
+
+  test('精选展厅：轮播能自动播、能切、幻灯片数与有封面的页面数一致', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(400);
+
+    const expected = PAGES.filter((p) => p.cover).length;
+    const info = await page.evaluate(() => {
+      const home = (window as any).__gameHome;
+      return home.carousel ? { count: home.carousel.count, playing: home.carousel.isPlaying(), index: home.carousel.index() } : null;
+    });
+    expect(info, '首页应当有精选展厅（有封面的页面 ≥2 时才有）').not.toBeNull();
+    expect(info!.count, '幻灯片数 = 有封面的页面数').toBe(expected);
+    expect(info!.playing, '轮播应当自动播放').toBe(true);
+    expect(info!.index).toBe(0);
+
+    // 程序式切到下一张（真箭头点击也走同一条路径，见 `ICECarousel.goTo`）
+    await page.evaluate(() => (window as any).__gameHome.carousel.goTo(1));
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => (window as any).__gameHome.carousel.index())).toBe(1);
+    const node = await page.evaluate(() => (window as any).__gameHome.find('featured-carousel'));
+    expect(node, '轮播根节点应当有 id 可查').not.toBeNull();
 
     expect(errors).toEqual([]);
   });

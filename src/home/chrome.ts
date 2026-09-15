@@ -17,11 +17,66 @@ import type { GamePageHandle } from '../kit';
  * 画布控件**没有** DOM 的自动测量：要排一行 chip/链接就得自己算宽度。
  * 中文按 1em、ASCII 按 0.58em 估（`ice-web-components` 内部对 CJK 也是这个量级），
  * 再加左右内边距。宁可估宽一点 —— 估窄了会挤压邻居（本仓已经踩过"列宽不够被挤出卡片"）。
+ *
+ * ⚠️ 这只是**兜底**（拿不到 canvas 时用）。需要精确的地方请用 `measureTextWidth` ——
+ * 实测这个估法对长 ASCII（如 `ice-web-components`）会低估约 8%，
+ * 结果是被 `ICETag` / `ICEBadge` **静默截断**成 `ice-web-compone…`（截图里抓到过）。
  */
 export function textWidth(text: string, fontSize: number): number {
   let width = 0;
   for (const ch of text) width += /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? fontSize : fontSize * 0.58;
   return Math.ceil(width);
+}
+
+/**
+ * 离屏 2D 上下文（惰性创建，只建一次）。
+ *
+ * 用途：用 `measureText` 拿**真实的**文字宽度，而不是按系数估算。
+ * 家族控件（`ICETag` / `ICEBadge`）的文字区是 `width - 2 × 内边距`，
+ * 所以给它们的宽度必须与真实字宽一致 —— 估窄了就截断，估宽了标签显得松垮。
+ */
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+function getMeasureContext(): CanvasRenderingContext2D | null {
+  if (measureCtx !== undefined) return measureCtx;
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    measureCtx = null;
+    return measureCtx;
+  }
+  const canvas = document.createElement('canvas');
+  measureCtx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+  return measureCtx;
+}
+
+/** 默认字体族：与 `ICEThemeTokens.font.family` 的首选一致（测量结果才与绘制对得上）。 */
+const MEASURE_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+/**
+ * 真实文字宽度（`canvas.measureText`）。
+ *
+ * 拿不到 2D 上下文时回退到 `textWidth()` 的估算 —— 宁愿稍微截断，也不能让调用方崩。
+ *
+ * @param fontWeight 只影响测量精度（粗体略宽）。传字符串形式的字重，如 `'600'`。
+ */
+export function measureTextWidth(text: string, fontSize: number, fontWeight: string = 'normal'): number {
+  const ctx = getMeasureContext();
+  if (!ctx) return textWidth(text, fontSize);
+  ctx.font = `${fontWeight} ${fontSize}px ${MEASURE_FONT_FAMILY}`;
+  const width = ctx.measureText(text).width;
+  // 向上取整并留 1px 余量：不同平台的字体渲染有小差异，宁可宽一点点
+  return Number.isFinite(width) && width > 0 ? Math.ceil(width) + 1 : textWidth(text, fontSize);
+}
+
+/**
+ * 家族控件（`ICETag` / `ICEBadge` / `ICEButton` 那一类）适配的宽度。
+ *
+ * 这些控件内部都按 `padX = theme.spacing.sm`（12）左右各留内边距，
+ * 所以"刚好放下这段文字"的宽度 = 真实字宽 + 24。
+ * 本函数把这件事收在一处 —— 之前每个调用点各写一个 `+26` / 固定 56，
+ * 长了就截断（`小游戏` 三字在 56px 宽里显示成 `小…`）。
+ */
+export function fitControlWidth(text: string, fontSize: number, fontWeight: string = 'normal'): number {
+  return measureTextWidth(text, fontSize, fontWeight) + 24;
 }
 
 /**

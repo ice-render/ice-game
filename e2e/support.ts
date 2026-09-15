@@ -9,16 +9,18 @@ import { expect, type Page } from '@playwright/test';
  *
  * ## 画布按 **id** 定位，不按序号
  *
- * 首页现在有**两块画布**（吸顶导航 `#navbar` + 页面主体 `#canvas`），其它页面各一块。
- * 早先这里用的是 `querySelectorAll('canvas')[index]` —— 那种写法在"将来往 DOM 里插一块画布"
- * 时会**静默错位**（断言开始量另一块画布，还可能照样通过），属于本仓一直在防的"空门"。
- * 改成 id 之后，顺序怎么变都不影响，意图也写在调用处。
+ * 首页现在有**三块画布**（吸顶导航 `#navbar` + 页面主体 `#canvas` + 背景效果层 `#bg`），
+ * 其它页面各一块。早先这里用的是 `querySelectorAll('canvas')[index]` —— 那种写法在
+ * "将来往 DOM 里插一块画布"时会**静默错位**（断言开始量另一块画布，还可能照样通过），
+ * 属于本仓一直在防的"空门"。改成 id 之后，顺序怎么变都不影响，意图也写在调用处。
  */
 
 /** 页面主体画布的 id（各页 index.html 里都是这个）。 */
 export const MAIN_CANVAS = 'canvas';
 /** 首页吸顶导航画布的 id。 */
 export const NAVBAR_CANVAS = 'navbar';
+/** 首页背景效果层画布的 id（粒子 / 网格 / 光斑，见 `src/home/effects-canvas.ts`）。 */
+export const EFFECTS_CANVAS = 'bg';
 
 /** 收集 pageerror 与 console error；用例收尾断言它是空的。 */
 export function collectErrors(page: Page): string[] {
@@ -111,6 +113,59 @@ export async function clickCanvas(page: Page, x: number, y: number, canvasId = M
   await page.mouse.click(point.x, point.y);
 }
 
+/**
+ * 把画布内部坐标 `(x, y)` 滚到**视口中间**（纵向），并断言它真的进了视口。
+ *
+ * ## 为什么必须有这一步（实测结论，别删）
+ *
+ * **视口外的 `page.mouse.move` 不会生效**：坐标超出视口高度时浏览器直接忽略该事件，
+ * 于是 hover 永远不触发、用例静默变成"空门"。
+ *
+ * 更绕的是**同坐标的 `mouse.click` 却生效**（实测：文档 y=1377、视口只有 900 高，
+ * 点击仍精确命中卡片并触发了跳转）。两个看起来一样的坐标操作行为不同 ——
+ * 所以"点击用例能过"**不能**当成"hover 用例也能过"的证据。
+ *
+ * 而首页在 hero 与精选展厅之后，第一张卡片的中心就已经在 `y≈1005`（视口 900）——
+ * 也就是说"直接 hover 卡片中心"这种写法在本页**天然是坏的**，且失败时没有任何报错。
+ *
+ * 用途：hover 之类的**指针悬停**断言之前先调它。点击用例不强制，
+ * 但为了贴近真实用户（能看到才会去点）也建议调。
+ *
+ * 顺带断言"滚动后目标真的在视口内"：将来版面再变高时**立刻报错**，
+ * 而不是退回成一条永远不触发 hover 的假用例。
+ */
+export async function scrollCanvasPointIntoView(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
+  await page.evaluate(
+    ({ id, px, py }) => {
+      const canvas = document.getElementById(id) as HTMLCanvasElement;
+      const box = canvas.getBoundingClientRect();
+      // 画布在**文档**里的纵向位置：`getBoundingClientRect` 是视口坐标，要补上当前滚动量
+      const canvasDocTop = box.top + window.scrollY;
+      window.scrollTo(0, canvasDocTop + py - window.innerHeight / 2);
+    },
+    { id: canvasId, px: x, py: y },
+  );
+  await page.waitForTimeout(250);
+
+  const viewportY = await page.evaluate(
+    ({ id, px, py }) => {
+      const canvas = document.getElementById(id) as HTMLCanvasElement;
+      const box = canvas.getBoundingClientRect();
+      return {
+        y: box.top + (py * box.height) / canvas.height,
+        innerHeight: window.innerHeight,
+      };
+    },
+    { id: canvasId, px: x, py: y },
+  );
+  expect(
+    viewportY.y,
+    `滚动之后目标点仍在视口外（视口 y=${Math.round(viewportY.y)}，视口高 ${viewportY.innerHeight}）——` +
+      `此时 mouse.move 会被浏览器忽略，用例会静默失效`,
+  ).toBeLessThan(viewportY.innerHeight);
+  expect(viewportY.y, '滚动之后目标点跑到视口上方去了').toBeGreaterThan(0);
+}
+
 /** 双击画布上的一个内部坐标点（桌面图标靠双击打开）。 */
 export async function dblclickCanvas(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
   const point = await canvasPoint(page, x, y, canvasId);
@@ -199,7 +254,12 @@ export interface LayoutAuditResult {
  */
 export async function auditLayout(
   page: Page,
-  options: { canvasId?: string; iceSource?: 'main' | 'navbar'; allowIdPrefixes?: string[]; tolerancePx?: number } = {},
+  options: {
+    canvasId?: string;
+    iceSource?: 'main' | 'navbar' | 'bg';
+    allowIdPrefixes?: string[];
+    tolerancePx?: number;
+  } = {},
 ) {
   return page.evaluate(
     ({ canvasId, iceSource, allowIdPrefixes, tolerancePx }) => {
@@ -209,7 +269,7 @@ export async function auditLayout(
       /*
        * ICE 实例必须与画布**成对取**。
        *
-       * 首页有两块画布、各自一个 ICE 实例：用"主画布的 ICE"去量"导航画布的尺寸"，
+       * 首页有三块画布、各自一个 ICE 实例：用"主画布的 ICE"去量"导航画布的尺寸"，
        * 会把主画布上 y > 60 的节点全判成越界（实测踩过：报了一屏假越界）。
        * 所以这里按来源显式选，不做"哪个能用就用哪个"的兜底。
        */
@@ -223,6 +283,8 @@ export async function auditLayout(
           null,
         // 吸顶导航（独立画布 + 独立 ICE 实例）
         navbar: () => (window as any).__gameHome?.navbar?.handle?.page?.ice ?? null,
+        // 背景效果层（第三个独立实例）
+        bg: () => (window as any).__gameHome?.effects?.handle?.page?.ice ?? null,
       };
       const ice = sources[iceSource] ? sources[iceSource]() : null;
       if (!ice || typeof ice.getAccessibilityTree !== 'function') {
@@ -372,7 +434,12 @@ export const DEFAULT_EDGE_TOLERANCE_PX = 4;
  */
 export async function expectLayoutClean(
   page: Page,
-  options: { canvasId?: string; iceSource?: 'main' | 'navbar'; allowIdPrefixes?: string[]; tolerancePx?: number } = {},
+  options: {
+    canvasId?: string;
+    iceSource?: 'main' | 'navbar' | 'bg';
+    allowIdPrefixes?: string[];
+    tolerancePx?: number;
+  } = {},
 ): Promise<LayoutAuditResult> {
   let result = await auditLayout(page, options);
   if ('error' in result && result.error) {

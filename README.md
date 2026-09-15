@@ -8,15 +8,27 @@
 
 > ⚠️ **Just for fun.** 纯娱乐与探索项目，不是产品，不要拿它当生产级 UI。
 
+首页本身就是一份**家族控件的样板**：hero 的三张规模卡是 `ICEStatCard`、
+精选展厅是 `ICECarousel`（自动轮播 + 箭头 + 圆点）、卡片是 `ICECard`（`title` + `extra` 插槽）、
+分类徽标是 `ICEBadge`、内含物标签是 `ICETag`、按钮是 `ICEButton`、分隔线是 `ICESeparator`、
+页脚的封面覆盖率是 `ICEProgressBar` —— 连背景的网格与粒子星座都在**第三块画布**上每帧绘制。
+
 首页有**吸顶导航**（品牌 + 分区锚点 + 文档/GitHub 入口）与**页脚**（ICE 家族各仓的 GitHub 链接）：
 
-| 吸顶导航 | 页脚 |
+| 精选展厅（`ICECarousel`） | 吸顶导航 |
 |---|---|
-| ![导航](screenshots/home-navbar.png) | ![页脚](screenshots/home-footer.png) |
+| ![精选展厅](screenshots/home-featured.png) | ![导航](screenshots/home-navbar.png) |
 
-> 导航栏是**第二块画布**（`#navbar`，`position: fixed`）——首页滚的是浏览器窗口，
-> 画在页面画布里会跟着内容滚走。页脚里的链接地址来自 `src/domain/family-repos.ts`，
-> 每条都核实过可访问；本仓 `ice-game` 尚未开源，页脚里如实标成纯文本**而不是编一个链接**。
+| 整页（主体画布） | 页脚（`ICEProgressBar` 是封面覆盖率） |
+|---|---|
+| ![首页](screenshots/home.png) | ![页脚](screenshots/home-footer.png) |
+
+> 首页是**三块画布**：`#bg`（背景粒子/网格，`fixed` 视口大小，每帧重绘）
+> + `#canvas`（主体内容，静态，只在交互时重绘）+ `#navbar`（吸顶导航，`fixed`）。
+> 把"会动的那层"隔离出来是必须的 —— 否则让背景动起来就等于每帧重绘整页两千像素高的内容；
+> 顺带得到一个好看的副作用：`#bg` 固定而主体滚动，于是"星星在玻璃后面不动、内容从前面滑过"。
+> 页脚里的链接地址来自 `src/domain/family-repos.ts`，每条都核实过可访问；
+> 本仓 `ice-game` 尚未开源，页脚里如实标成纯文本**而不是编一个链接**。
 
 ## 1. 这里有什么
 

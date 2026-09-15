@@ -12,11 +12,17 @@
       画布高度由内容算出来（见 src/home/main.ts 的 measureCanvasHeight）。
       游戏页则相反 —— 固定画布 + 居中裁切，因为游戏版面不该跟着窗口重排。
 
-      页面结构是**两块画布**：
-        #navbar —— 吸顶导航（CSS fixed，独立 ICE 实例，见 src/home/navbar.ts）
-        #canvas —— 页面主体（随窗口滚动）
+      ## 三块画布，三种角色（z 从下到上）
 
-      两块都固定宽度 1180 并水平居中，所以左右对齐、看起来是一个整体版面；
+        #bg       position: fixed，视口大小 —— **会动的那一层**（网格 / 粒子 / 光斑）。
+                  每帧重绘，所以必须小、也必须与静态内容分开，否则等于每帧重画整页。
+        #canvas   static，内容高度 —— 卡片与文字。**静态**：只在交互时重绘。
+        #navbar   position: fixed，条状 —— 吸顶导航，独立 ICE 实例。
+
+      副作用很好看：#bg 是 fixed 而 #canvas 会滚动，于是滚动时"星星在玻璃后面不动、
+      内容从前面滑过"，视差感是白来的。
+
+      三块都是固定宽度 1180 且水平居中，所以左右对齐、看起来是一个整体版面；
       也因此不需要响应式重排（本仓其它页面同样是"固定设计尺寸、窗口小了裁切"）。
     */
     :root {
@@ -38,49 +44,55 @@
       /* 顶部留出吸顶导航的位置，否则 hero 会被导航压住 */
       padding: calc(var(--navbar-height) + 20px) 0 40px;
       /*
-        背景三层叠加（从下到上）：
-          ① 深色径向渐变 —— 页面主调；
-          ② 横向细线 + ③ 纵向细线 —— 一格 34px 的**极淡网格**。
-        网格是"游戏厅/竞技场"最省的暗示：透明度压到 0.03 以下，只在暗底上看出一层秩序感，
-        不会抢内容。用 CSS 而不是画在画布上：不占引擎的绘制开销，也不影响版面体检。
+        最底层只有一个深色径向渐变。**网格与粒子已经移到 `#bg` 画布上**
+        （见 src/home/effects-canvas.ts）：用画布画才能动（网格呼吸、粒子漂移），
+        而且整页的视觉因此都来自引擎，不再依赖 CSS 效果。
       */
       background-color: #080a0f;
-      background-image:
-        linear-gradient(rgba(120, 165, 255, 0.028) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(120, 165, 255, 0.028) 1px, transparent 1px),
-        radial-gradient(circle at 50% 12%, #1b2130 0%, #080a0f 60%);
-      background-size:
-        34px 34px,
-        34px 34px,
-        100% 100%;
-      background-attachment: fixed, fixed, fixed;
+      background-image: radial-gradient(circle at 50% 12%, #1b2130 0%, #080a0f 62%);
+      background-attachment: fixed;
     }
 
     /*
-      吸顶导航：`position: fixed` 让它永远可见、**不随窗口滚动**。
-      宽度固定 + 居中，与页面主体左右对齐。
-      圆角与阴影由画布内部自己画（见 navbar.ts），所以这里不给 canvas 加边框圆角。
+      效果层：铺满视口、水平居中、在最底下。
+      `pointer-events: none` —— 它只是氛围，绝不能挡住内容的点击。
     */
+    #bg {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: var(--canvas-width);
+      display: block;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    #canvas {
+      display: block;
+      position: relative;
+      z-index: 1;
+      border-radius: 14px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+    }
+
     #navbar {
       position: fixed;
       top: 0;
       left: 50%;
       transform: translateX(-50%);
       width: var(--canvas-width);
-      /* 盖在页面主体之上：页面内容会从它下面滚过 */
+      /* 盖在内容之上：页面内容会从它下面滚过 */
       z-index: 100;
       display: block;
     }
-
-    #canvas {
-      display: block;
-      border-radius: 14px;
-      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
-    }
   </style>
   <body>
+    <!-- 效果层（粒子 / 网格 / 光斑）：内容由 src/home/effects-canvas.ts 绘制 -->
+    <canvas id="bg" width="1180" height="900"></canvas>
+
     <!-- 吸顶导航：独立画布，内容由 src/home/navbar.ts 绘制 -->
-    <canvas id="navbar" width="1180" height="60"></canvas>
+    <canvas id="navbar" width="1180" height="64"></canvas>
 
     <!-- 页面主体：宽高都由 main.ts 按目录内容算出后设置，这里的值只是初始占位 -->
     <canvas id="canvas" width="1180" height="660"></canvas>
