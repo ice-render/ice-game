@@ -3,7 +3,9 @@ import { findPage } from '../src/domain/catalog';
 import { RECT_HELPER, collectErrors, dblclickCanvas, expectCanvasPainted, expectLayoutClean } from './support';
 
 /**
- * Windows XP 桌面页（`src/ported/windows-xp`，从上游 `examples/windows-xp.html` 逐字抽取）。
+ * Windows XP 桌面页（`src/machines/windows-xp`，已从 `scripts/sync-upstream.mjs` 的抽取链路
+ * 迁出、收归本仓自维护，见 `src/machines/windows-xp/main.ts` 头注释；上游 `examples/windows-xp.html`
+ * 仍是只读的）。
  *
  * 这页最有意思的地方是它**会开机**：自检 → 欢迎屏 → 桌面是一台状态机
  * （`window.__result.session.phase`），所以 e2e 也按真实使用顺序走一遍，

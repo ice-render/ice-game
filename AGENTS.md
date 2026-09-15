@@ -29,10 +29,13 @@ src/
 │  ├─ meta.json         唯一配置：标题/说明/分组/尺寸/主色
 │  ├─ main.ts           装配（kit 六件怎么接）
 │  └─ model.ts          游戏规则（纯逻辑，可单测）
-├─ ported/<slug>/     ★ 上游移植的整机（arcade / windows-xp）
+├─ ported/<slug>/     ★ 上游移植的整机（arcade）
 │  ├─ meta.json         ← 首次由 sync-upstream 生成，之后**手改**（文案）
 │  ├─ index.html        ← 生成物，禁手改
 │  └─ main.ts           ← 生成物，禁手改
+├─ machines/<slug>/   ★ 自维护整机（windows-xp）：同样 `meta.json` + 自写 `index.html` + 自维护 `main.ts`。
+│  画布固定 1440×900 内部坐标；`index.html` 用 CSS `min(100vw,100vh*1.6)` 把画布按 1.6 比例**占满视口**（比例
+│  不符则占满较窄边、body flex 居中，黑色信箱边）——**不要**用 object-fit（会破坏点哪命中）。
 ├─ templates/page.html  小游戏共用页面骨架（HTML 只写一份）
 └─ home/               游戏厅首页
    ├─ main.ts            hero + 卡片网格 + 页脚（画布高度按内容算）
@@ -414,8 +417,8 @@ e2e 的判据分三层（**缺一层就会出现"看起来通过其实没验证"
    实测：按钮位置像素与任务栏空白处完全相同（`48,114,229`），强制 `ice.dirty = true`
    与聚焦窗口后依旧；仓里既有的 `xp-desktop.png` 也没有这些按钮。
    而 a11y 树里它们存在，8 个窗口时最后一个会排到 x=1488（超出桌面 1440 约 48px）。
-   因为 `src/ported/windows-xp/main.ts` **禁止手改**，本仓不做修，
-   但 e2e 里按子树放行（`allowIdPrefixes: ['task-']`）并写清了依据 —— 上游修好后可删。
+   因为 `src/machines/windows-xp/main.ts` 虽已收归本仓自维护（可直接改），但这属于上游示例的既有行为，
+   本仓暂不做修，e2e 里按子树放行（`allowIdPrefixes: ['task-']`）并写清了依据 —— 上游修好后可删。
 3. **上游是只读的**（见铁律 1）。上述两条都属于上游示例的既有行为。
 
 ## 环境提醒：引擎仓正在被其他人并行重构
