@@ -76,15 +76,14 @@ export const FAMILY_HOME = 'https://github.com/ice-render';
 /**
  * **本仓自己的状态**。
  *
- * `ice-game` **还没有建 GitHub 远端**（只有本地 git），所以这里如实标成"未开源"，
- * 而不是编一个地址 —— 页脚挂一个 404 链接比不挂更糟。
- * 等远端建好之后，把 `url` 填上、`published` 改成 `true`，页脚会自动变成可点链接。
+ * `ice-game` 远端已建好（Gitee `ice-render/ice-game` + GitHub `ice-render/ice-game`），
+ * 已双推。这里填 `url` + `published: true`，页脚自动渲染成可点链接。
  */
 export const SELF_REPO: { name: string; role: string; url: string | null; published: boolean } = {
   name: 'ice-game',
   role: '本仓：画布游戏厅（用家族控件做的单页小游戏合集）',
-  url: null,
-  published: false,
+  url: 'https://github.com/ice-render/ice-game',
+  published: true,
 };
 
 /** 按分组取仓库。 */
