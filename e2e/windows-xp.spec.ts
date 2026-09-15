@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { findPage } from '../src/domain/catalog';
-import { RECT_HELPER, collectErrors, dblclickCanvas, expectCanvasPainted, expectLayoutClean } from './support';
+import { RECT_HELPER, collectErrors, clickCanvas, dblclickCanvas, expectCanvasPainted, expectLayoutClean } from './support';
 
 /**
  * Windows XP 桌面页（`src/machines/windows-xp`，已从 `scripts/sync-upstream.mjs` 的抽取链路
@@ -275,4 +275,87 @@ test.describe('Windows XP 信箱边多视口回归', () => {
       });
     });
   }
+});
+
+/**
+ * 登录框透明 input 替身对齐（信箱边缩放）。
+ *
+ * 复现条件：XP 页用 CSS `min()` 把 1440×900 画布等比缩放到视口（非 1.6 视口
+ * scale<1），并通过 `ice.viewport.scale` 修正点击映射。但透明 input 替身
+ * （ICETextField 内的 ICENativeInput）之前直接用**未缩放**的世界坐标 + canvasRect 定位，
+ * 于是 input 整体偏右偏下、光标飘到画布外 —— 这正是「用户名文字错位 + 光标飘走」。
+ * 修复在 ice-web-components 的 ICETextField：box 乘以 `viewport.scale`。
+ *
+ * 这里用真实浏览器断言：聚焦密码框后，挂上去的 `<input>` 其屏幕位置必须与
+ * 「canvasRect + (世界坐标 + 文本左内缩) × viewport.scale」吻合，且落在画布可视区内。
+ */
+test.describe('Windows XP 登录框透明输入对齐（信箱边缩放）', () => {
+  test.use({ viewport: { width: 1024, height: 680 } });
+
+  test('密码框的透明 input 替身落回画布文字真实位置（不飘到画布外）', async ({ page }) => {
+    const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
+    await page.addInitScript({ content: RECT_HELPER });
+    await page.goto('/windows-xp.html');
+
+    await page.waitForFunction(() => Boolean((window as any).__result));
+    for (let i = 0; i < 8; i += 1) {
+      const phase = await page.evaluate(() => (window as any).__result.session.phase);
+      if (phase === 'login') break;
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(300);
+    }
+    expect(await page.evaluate(() => (window as any).__result.session.phase)).toBe('login');
+
+    // 点第一个用户磁贴 → 进密码页
+    const tileRect = await page.evaluate(() => (window as any).__rect((window as any).__result.userTiles[0]));
+    await clickCanvas(page, tileRect.left + tileRect.width / 2, tileRect.top + tileRect.height / 2);
+    await page.waitForFunction(() => (window as any).__result.session.phase === 'password');
+
+    // 点密码框 → 聚焦、挂透明 input 替身
+    const fieldBox = await page.evaluate(() => {
+      const box = (window as any).__result.passwordField.getMinBoundingBox(true);
+      return { left: box.tl[0], top: box.tl[1], width: box.br[0] - box.tl[0], height: box.br[1] - box.tl[1] };
+    });
+    await clickCanvas(page, fieldBox.left + fieldBox.width / 2, fieldBox.top + fieldBox.height / 2);
+    await page.waitForSelector('input', { timeout: 3000 });
+
+    // 期望屏幕位置：页面坐标 = canvasRect + (世界坐标 + 文本左内缩) × viewport.scale
+    const expected = await page.evaluate(() => {
+      const r = (window as any).__result;
+      const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+      const cr = canvas.getBoundingClientRect();
+      const scale = (r.ice.viewport && r.ice.viewport.scale) || 1;
+      const box = r.passwordField.getMinBoundingBox(true);
+      const textLeft = Number(r.passwordField.textNode.state.left) || 0;
+      const textWidth = Number(r.passwordField.textNode.state.width) || r.passwordField.state.width;
+      const height = Number(r.passwordField.state.height) || 0;
+      return {
+        canvasLeft: cr.left,
+        canvasTop: cr.top,
+        canvasRight: cr.right,
+        canvasBottom: cr.bottom,
+        scale,
+        expLeft: cr.left + (box.tl[0] + textLeft) * scale,
+        expTop: cr.top + box.tl[1] * scale,
+        expWidth: textWidth * scale,
+        expHeight: height * scale,
+      };
+    });
+    const actual = await page.evaluate(() => {
+      const input = document.querySelector('input') as HTMLInputElement;
+      const rect = input.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom };
+    });
+
+    const tol = 2;
+    expect(Math.abs(actual.left - expected.expLeft), `input.left=${actual.left} 期望≈${expected.expLeft}（scale=${expected.scale}）`).toBeLessThan(tol);
+    expect(Math.abs(actual.top - expected.expTop), `input.top=${actual.top} 期望≈${expected.expTop}`).toBeLessThan(tol);
+    expect(Math.abs(actual.width - expected.expWidth), `input.width=${actual.width} 期望≈${expected.expWidth}`).toBeLessThan(tol);
+    // 关键：替身必须落在画布可视区内（缩放错了会飘到画布外 / 右下方）
+    expect(actual.right, '透明 input 右缘超出画布').toBeLessThanOrEqual(expected.canvasRight + tol);
+    expect(actual.left, '透明 input 左缘在画布左边外').toBeGreaterThanOrEqual(expected.canvasLeft - tol);
+    expect(actual.bottom, '透明 input 下缘超出画布').toBeLessThanOrEqual(expected.canvasBottom + tol);
+
+    expect(errors).toEqual([]);
+  });
 });
