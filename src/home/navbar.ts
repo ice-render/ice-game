@@ -15,28 +15,43 @@
  * `ICEScrollPane`**（画布内部滚动容器），而这里的滚动发生在窗口上 —— 直接用不上。
  * 这也是本模块存在的理由（而不是"忘了用现成组件"）。
  *
- * ## 宽度是固定的 1180
+ * ## ⚠️ 结构：**背景层与内容层必须分开**
  *
- * 与页面画布同宽并居中：两者左右对齐，看起来是一个整体的版面；
- * 也因此**不需要响应式重排**（本仓其它页面同样是"固定设计尺寸、窗口小了裁切"）。
+ * 想要"顶部两个角是方角（贴住视口）、底部两个角是圆角"，最省事的做法是把背景面板
+ * 上移 `radius` 像素、让上边越出画布被裁掉 —— `ICEPanel` 只支持整体圆角，
+ * 没有"指定哪几个角"这种 API。
  *
- * 内容：左侧品牌徽标 + 名称，中间是分区锚点（点了滚到对应分组），
- * 右侧是家族 GitHub 与文档入口。
+ * **但子节点是相对父容器定位的**：把导航项挂在 `top: -radius` 的容器下，
+ * 它们的 `top: 0` 就变成了画布 y = -radius —— 整条导航的内容被顶掉 `radius` 像素。
+ * 实测症状：文字贴上边缘、徽标只剩半截（当时还以为是"垂直居中坏了"）。
+ *
+ * 所以这里分成两个兄弟层：
+ *   ```
+ *   #navbar 画布
+ *   ├── bar      （top: -radius，只是背景；越出部分被裁掉 → 顶部方角、底部圆角）
+ *   └── content  （top: 0，高度 = 导航高度；**所有导航项挂这里**，坐标正常）
+ *   ```
+ * 一眼看不出差别，但再也不会互相干扰。改这个文件时别把两层合回去。
  */
-import { ICELabel, ICEPanel } from 'ice-web-components';
+import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import { FAMILY_HOME, FAMILY_REPOS } from '../domain/family-repos';
 import { createPage, type GamePageHandle } from '../kit';
-import { brandBadge, createLink, divider, textWidth, type LinkHandle } from './chrome';
+import { brandBadge, createLink, textWidth, type LinkHandle } from './chrome';
 
-/** 导航栏画布尺寸（CSS 里同步引用这两个值，改这里就够）。 */
+/** 导航栏画布尺寸（CSS 里同步引用高度，改这里就够）。 */
 export const NAVBAR = {
   width: 1180,
-  height: 60,
-  /** 底部圆角：顶部是方角（贴着视口边缘），底部圆角与卡片语言一致。 */
-  radius: 16,
+  height: 64,
+  /** 底部圆角（顶部是方角，靠背景层上移裁掉）。 */
+  radius: 18,
   /** 内容左右内边距。 */
-  padX: 22,
+  padX: 26,
 };
+
+/** 导航项 / 按钮的胶囊尺寸与字号。 */
+const PILL = { height: 36, fontSize: 13.5 };
+/** 品牌徽标尺寸。 */
+const BADGE_SIZE = 30;
 
 /** 一个分区锚点（由首页传入：它才知道各分组在画布里的纵向位置）。 */
 export interface NavbarSection {
@@ -84,138 +99,196 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
 
   const page = createPage({ canvasId: 'navbar', continuousFrames: false });
   const theme = page.theme;
+  const accent = theme.colors.primary;
 
   const openLink = options.openLink || ((url: string) => window.open(url, '_blank', 'noopener,noreferrer'));
 
+  /* ------------------------------ 背景层 ------------------------------ */
+
+  // 上移 radius、高度多出 radius：越出画布的上边（含两个圆角）被裁掉 → 顶部方角、底部圆角
+  const barGradient = page.ice.createLinearGradient(0, -NAVBAR.radius, 0, NAVBAR.height);
+  barGradient.addColorStop(0, 'rgba(18, 25, 40, 0.94)');
+  barGradient.addColorStop(0.62, 'rgba(11, 15, 24, 0.90)');
+  barGradient.addColorStop(1, 'rgba(8, 11, 18, 0.86)');
+
+  page.ice.addChild(
+    new ICEPanel({
+      id: 'navbar-bar',
+      interactive: false,
+      left: 0,
+      top: -NAVBAR.radius,
+      width: NAVBAR.width,
+      height: NAVBAR.height + NAVBAR.radius,
+      radius: NAVBAR.radius,
+      style: {
+        fillStyle: barGradient,
+        strokeStyle: 'rgba(94, 132, 214, 0.30)',
+        lineWidth: 1,
+        ...theme.shadows.md,
+      },
+    }),
+  );
+
   /*
-   * 背景条：故意**越出画布顶部** `radius` 像素。
+   * 顶部一条"霓虹"线：画布最上沿 2px 的横向渐变（两端透明、中间亮）。
    *
-   * `ICEPanel` 只支持整体圆角（没有"指定哪几个角"的 API），而这里要的是
-   * "顶部方角贴住视口、底部圆角"——把面板上移 radius，圆角部分就画到画布外被裁掉了，
-   * 可见部分正好是想要的样子。比自己去改组件或画一条自定义路径都简单。
+   * 挂在**画布根**上而不是 bar 里：bar 顶部那两个角被裁掉了，
+   * 挂在 bar 里的话线会跟着圆角一起被切掉两端。
    */
-  const bar = new ICEPanel({
-    id: 'navbar-bar',
+  const topLine = page.ice.createLinearGradient(0, 0, NAVBAR.width, 0);
+  topLine.addColorStop(0, 'rgba(13, 110, 253, 0)');
+  topLine.addColorStop(0.26, 'rgba(13, 110, 253, 0.70)');
+  topLine.addColorStop(0.5, 'rgba(96, 196, 255, 0.95)');
+  topLine.addColorStop(0.74, 'rgba(13, 110, 253, 0.70)');
+  topLine.addColorStop(1, 'rgba(13, 110, 253, 0)');
+  page.ice.addChild(
+    new ICEPanel({
+      id: 'navbar-topline',
+      interactive: false,
+      left: 0,
+      top: 0,
+      width: NAVBAR.width,
+      height: 2,
+      radius: 0,
+      style: { fillStyle: topLine, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0, shadowBlur: 0 },
+    }),
+  );
+
+  /* ------------------------------ 内容层 ------------------------------ */
+
+  // 所有导航项挂在这一层（top: 0，坐标与"看起来的位置"一致）
+  const content = new ICEWidget({
+    id: 'navbar-content',
     interactive: false,
     left: 0,
-    top: -NAVBAR.radius,
-    width: NAVBAR.width,
-    height: NAVBAR.height + NAVBAR.radius,
-    radius: NAVBAR.radius,
-    style: {
-      // 半透明：页面内容从下面滚过时能透出一点，是"磨砂条"的感觉
-      fillStyle: 'rgba(9, 12, 18, 0.86)',
-      strokeStyle: theme.colors.border,
-      lineWidth: 1,
-      ...theme.shadows.md,
-    },
-  });
-  page.ice.addChild(bar);
-
-  /* ------------------------------- 左侧品牌 ------------------------------- */
-
-  const badgeSize = 28;
-  brandBadge(bar, {
-    left: NAVBAR.padX,
-    top: Math.round((NAVBAR.height - badgeSize) / 2),
-    size: badgeSize,
-    accent: theme.colors.primary,
-  });
-  const brandText = new ICELabel({
-    interactive: false,
-    left: NAVBAR.padX + badgeSize + 10,
     top: 0,
-    width: 120,
+    width: NAVBAR.width,
     height: NAVBAR.height,
-    verticalAlign: 'middle',
-    text: 'ICE GAME',
-    style: { fontSize: 17, fontWeight: '700', fillStyle: theme.colors.text },
+    fill: false,
+    stroke: false,
   });
-  bar.addChild(brandText, false);
+  page.ice.addChild(content);
 
-  /* ------------------------------- 分区锚点 ------------------------------- */
+  /* ------------------------------- 品牌 ------------------------------- */
 
-  const brandRight = NAVBAR.padX + badgeSize + 10 + textWidth('ICE GAME', 17);
-  // 品牌与分区之间一条竖线：把"标识"和"导航"分开，避免看起来像一长串
-  divider(bar, { left: brandRight + 18, top: 16, height: NAVBAR.height - 32, color: theme.colors.borderSecondary });
+  const badgeLeft = NAVBAR.padX;
+  const badgeTop = Math.round((NAVBAR.height - BADGE_SIZE) / 2);
+  const badgeGradient = page.ice.createLinearGradient(
+    badgeLeft,
+    badgeTop,
+    badgeLeft + BADGE_SIZE,
+    badgeTop + BADGE_SIZE,
+  );
+  badgeGradient.addColorStop(0, '#4d94ff');
+  badgeGradient.addColorStop(1, '#0b5ed7');
+  brandBadge(content, {
+    left: badgeLeft,
+    top: badgeTop,
+    size: BADGE_SIZE,
+    accent,
+    fillStyle: badgeGradient,
+    glow: true,
+  });
 
+  const brandLeft = badgeLeft + BADGE_SIZE + 12;
+  content.addChild(
+    new ICELabel({
+      interactive: false,
+      left: brandLeft,
+      top: 0,
+      width: 150,
+      height: NAVBAR.height,
+      align: 'left',
+      verticalAlign: 'middle',
+      text: 'ICE GAME',
+      style: { fontSize: 18, fontWeight: '700', fillStyle: theme.colors.text },
+    }),
+    false,
+  );
+
+  /* --------------------------- 分区锚点（胶囊） --------------------------- */
+
+  const brandRight = brandLeft + textWidth('ICE GAME', 18);
+
+  // 品牌区与导航区之间的竖线（分栏暗示）
+  content.addChild(
+    new ICEPanel({
+      interactive: false,
+      left: brandRight + 14,
+      top: Math.round((NAVBAR.height - 22) / 2),
+      width: 1,
+      height: 22,
+      radius: 0,
+      style: {
+        fillStyle: 'rgba(255,255,255,0.12)',
+        strokeStyle: 'rgba(255,255,255,0)',
+        lineWidth: 0,
+        shadowBlur: 0,
+      },
+    }),
+    false,
+  );
+
+  let cursorX = brandRight + 32;
   const sectionLinks: LinkHandle[] = [];
-  let cursorX = brandRight + 34;
   for (const section of options.sections) {
-    const handle = createLink(bar, page, {
+    const handle = createLink(content, page, {
       id: `navbar-section-${section.key}`,
       left: cursorX,
-      top: 0,
-      height: NAVBAR.height,
+      top: Math.round((NAVBAR.height - PILL.height) / 2),
+      height: PILL.height,
       text: section.label,
-      fontSize: 13.5,
-      paddingX: 12,
-      accent: theme.colors.primary,
-      underline: true,
+      fontSize: PILL.fontSize,
+      paddingX: 16,
+      align: 'center',
+      accent,
+      pill: true,
       onClick: () => scrollToSection(section.key),
     });
     sectionLinks.push(handle);
-    cursorX += handle.node.state.width;
+    cursorX += handle.node.state.width + 6;
   }
 
   /* ------------------------------- 右侧外链 ------------------------------- */
 
   const docRepo = FAMILY_REPOS.find((repo) => repo.name === 'ice-render-doc');
-  const externals: { id: string; text: string; url: string; emphasize?: boolean }[] = [
-    ...(docRepo ? [{ id: 'navbar-docs', text: '文档', url: docRepo.url }] : []),
-    { id: 'navbar-github', text: 'GitHub', url: FAMILY_HOME, emphasize: true },
+  const externals: { id: string; text: string; url: string; solid: boolean }[] = [
+    ...(docRepo ? [{ id: 'navbar-docs', text: '文档', url: docRepo.url, solid: false }] : []),
+    { id: 'navbar-github', text: 'GitHub', url: FAMILY_HOME, solid: true },
   ];
 
   /**
-   * 从右往左算位置（最后一个贴右边距，往前依次让位），**先算完位置再挂节点**。
+   * 从右往左算位置，**先算完再挂节点**。
    *
-   * 顺序有讲究：GitHub 那颗要垫一层强调底板，底板必须**先挂**（挂载顺序 = 绘制顺序，
-   * 后挂的盖在上面）。曾经试过先挂链接再往 `childNodes` 里 unshift 底板 ——
-   * 那是绕过引擎的挂载逻辑（不设 `parentNode`、不走置脏），不能用。
+   * 顺序有讲究：胶囊底必须在内容之前挂（挂载顺序 = 绘制顺序，后挂的盖在上面）。
+   * 曾经试过先挂链接、再往 `childNodes` 里 unshift 底色 —— 那是绕过引擎的挂载逻辑
+   * （不设 `parentNode`、不走置脏），不能用。
    */
   const placed: { item: (typeof externals)[number]; left: number; width: number }[] = [];
   let rightX = NAVBAR.width - NAVBAR.padX;
   for (const item of [...externals].reverse()) {
-    const width = textWidth(item.text, 13.5) + 24;
+    const width = textWidth(item.text, PILL.fontSize) + 40;
     rightX -= width;
     placed.push({ item, left: rightX, width });
+    rightX -= 8;
   }
-  placed.reverse(); // 还原成从左到右的顺序（便于阅读；挂载顺序另按 need 处理）
-
-  // 强调底板（GitHub）
-  for (const { item, left, width } of placed) {
-    if (!item.emphasize) continue;
-    const plate = new ICEPanel({
-      interactive: false,
-      left,
-      top: Math.round((NAVBAR.height - 32) / 2),
-      width,
-      height: 32,
-      radius: 8,
-      style: {
-        fillStyle: 'rgba(13, 110, 253, 0.16)',
-        strokeStyle: theme.colors.primary,
-        lineWidth: 1,
-        shadowBlur: 0,
-      },
-    });
-    bar.addChild(plate, false);
-  }
+  placed.reverse();
 
   const externalHandles: LinkHandle[] = [];
   for (const { item, left, width } of placed) {
     externalHandles.push(
-      createLink(bar, page, {
+      createLink(content, page, {
         id: item.id,
         left,
-        top: 0,
+        top: Math.round((NAVBAR.height - PILL.height) / 2),
         width,
-        height: NAVBAR.height,
+        height: PILL.height,
         text: item.text,
-        fontSize: 13.5,
+        fontSize: PILL.fontSize,
         align: 'center',
-        accent: theme.colors.primary,
-        underline: true,
+        accent,
+        pill: true,
+        solid: item.solid,
         onClick: () => openLink(item.url),
       }),
     );
@@ -228,6 +301,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
    *
    * 判据：视口上方（留出导航高度 + 一点余量）**最近的一个**分组标题。
    * 用 `toDocumentY` 把画布坐标换算成文档坐标，所以这里不关心版面怎么排。
+   * 监听用 `passive: true`（不改滚动行为，别拖慢滚动）。
    *
    * ⚠️ 还没滚过第一个分组时（页面刚打开、停在 hero），要**回退到第一个**而不是"一个都不亮"：
    * 分组标题在 hero 下方，滚到顶时本来就没经过任何标题 —— 按字面规则会得到"无高亮"，
@@ -255,7 +329,6 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
   };
 
   const onScroll = () => applyActive();
-  // `passive: true`：只是读滚动位置、不改滚动行为，别拖慢滚动
   window.addEventListener('scroll', onScroll, { passive: true });
 
   const scrollToSection = (key: string) => {
@@ -265,7 +338,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
     window.scrollTo({ top: options.toDocumentY(section.canvasY) - NAVBAR.height - 16, behavior: 'smooth' });
     // 平滑滚动过程中 scroll 事件会持续触发，高亮随后自动跟上；这里先立即响应点击
     activeKey = key;
-    options.sections.forEach((section2, index) => sectionLinks[index]?.setActive(section2.key === key));
+    options.sections.forEach((item, index) => sectionLinks[index]?.setActive(item.key === key));
   };
 
   applyActive();

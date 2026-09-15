@@ -222,17 +222,19 @@ test.describe('游戏厅首页', () => {
     const layout = await page.evaluate(() => {
       const nav = document.getElementById('navbar')!.getBoundingClientRect();
       const main = document.getElementById('canvas')!.getBoundingClientRect();
-      return { navBottom: nav.bottom, mainTop: main.top };
+      return { navTop: nav.top, navBottom: nav.bottom, navHeight: nav.height, mainTop: main.top };
     });
     expect(layout.mainTop, '页面主体被导航压住了').toBeGreaterThanOrEqual(layout.navBottom - 1);
 
     // ② 导航是独立画布且固定在视口顶部（滚动后位置不变）
-    const before = layout.navBottom - 60; // navbar 高 60，顶部固定时其 top ≈ 0
+    //
+    // ⚠️ 别把导航高度写死在测试里：这里原来是 `navBottom - 60`，
+    // 导航从 60 改成 64 之后那条断言就假失败了。固定定位下 `navTop` 本身就应当是 0。
     await page.evaluate(() => window.scrollTo(0, 400));
     await page.waitForTimeout(300);
     const navTop = await page.evaluate(() => document.getElementById('navbar')!.getBoundingClientRect().top);
-    expect(navTop, '导航应当固定，不随窗口滚动').toBeCloseTo(before, 0);
-    expect(Math.abs(navTop)).toBeLessThanOrEqual(1);
+    expect(navTop, '导航应当固定，不随窗口滚动').toBeCloseTo(0, 0);
+    expect(layout.navHeight, '导航高度应当与代码里的 NAVBAR.height 一致').toBeGreaterThan(40);
 
     // ③ 导航画布真的画了东西（不是一块透明画布）
     await expectCanvasPainted(page, 0.02, { minOpaque: 0.5, canvasId: NAVBAR_CANVAS });

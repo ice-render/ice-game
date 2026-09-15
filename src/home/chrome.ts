@@ -25,18 +25,42 @@ export function textWidth(text: string, fontSize: number): number {
 }
 
 /**
- * 品牌徽标：accent 色圆角方块 + 白色播放三角（与页面 favicon 同形）。
+ * 品牌徽标：圆角方块 + 播放三角（与页面 favicon 同形）。
  *
  * 三角用引擎的 `ICEIsogon`（正多边形，`edges: 3`）画，**不用字符**：
  * 引擎的文本渲染走 canvas `fillText`，`▶` 这类"几何形状字符"在部分字体/平台下会走
  * 彩色 emoji 呈现，渲染成怪符号（AGENTS 铁律 6 已记录同类问题）。
  * 用图元拼出来的 mark 在任何字体环境下都稳定，也不依赖字体有没有这个字形。
+ *
+ * @param options.fillStyle 徽标底色。可以传 `ice.createLinearGradient(...)` 的渐变对象
+ *   （引擎官方支持：`createLinearGradient` 会把停靠点一起记录下来，导出器也认）——
+ *   注意**渐变坐标是画布绝对坐标**，所以渐变由调用方按自己的绝对位置构造。
  */
 export function brandBadge(
   parent: any,
-  options: { left: number; top: number; size?: number; accent: string; radius?: number },
+  options: { left: number; top: number; size?: number; accent: string; radius?: number; fillStyle?: any; glow?: boolean },
 ): any {
   const size = options.size || 28;
+  const accent = options.accent;
+
+  // 外发光：一枚比徽标大一圈、低透明度的方块垫在底下（画布里没有 CSS box-shadow，
+  // 想要"发光"就得自己叠一层。alpha 压得很低，只做氛围）
+  if (options.glow) {
+    const spread = Math.round(size * 0.34);
+    parent.addChild(
+      new ICEPanel({
+        interactive: false,
+        left: options.left - spread,
+        top: options.top - spread,
+        width: size + spread * 2,
+        height: size + spread * 2,
+        radius: Math.round((size + spread * 2) * 0.34),
+        style: { fillStyle: 'rgba(13, 110, 253, 0.16)', strokeStyle: 'rgba(13, 110, 253, 0)', shadowBlur: 0 },
+      }),
+      false,
+    );
+  }
+
   const badge = new ICEPanel({
     interactive: false,
     left: options.left,
@@ -44,23 +68,27 @@ export function brandBadge(
     width: size,
     height: size,
     radius: options.radius ?? Math.round(size * 0.28),
-    style: { fillStyle: options.accent, strokeStyle: options.accent, shadowBlur: 0, lineWidth: 0 },
+    style: {
+      fillStyle: options.fillStyle || accent,
+      strokeStyle: 'rgba(255,255,255,0.22)',
+      lineWidth: 1,
+      shadowBlur: 0,
+    },
   });
   parent.addChild(badge, false);
 
   /*
-   * 播放三角：`startAngle: 0` 让一个顶点朝右（`dotPath` 的默认原点在 (0,0)，
-   * 而正多边形的点是绕原点算的）—— 所以这里把它放在徽标中心，靠 `radius` 控制大小，
+   * 播放三角：`startAngle: 90` 让一个顶点朝上（`dotPath` 的点是绕原点算的），
    * 再整体右移一点点，视觉上才是"居中"（三角形重心偏左）。
    */
-  const radius = Math.round(size * 0.26);
+  const radius = Math.round(size * 0.25);
   const triangle = new ICEIsogon({
     interactive: false,
-    left: Math.round(size / 2 + radius * 0.18),
+    left: Math.round(size / 2 + radius * 0.2),
     top: Math.round(size / 2),
     radius,
     edges: 3,
-    startAngle: 90,
+    startAngle: 0,
     style: { fillStyle: '#ffffff', strokeStyle: '#ffffff', lineWidth: 0, shadowBlur: 0 },
   });
   badge.addChild(triangle, false);
@@ -98,8 +126,22 @@ export interface LinkOptions {
   accent: string;
   /** 点击回调（外链由调用方决定 window.open / location）。 */
   onClick: () => void;
-  /** 悬停时是否显示下划线（导航项要，页脚列表不要）。 */
+  /**
+   * 悬停/激活时显示一条下划线（纯文字链接用；胶囊形态请用 `pill`）。
+   */
   underline?: boolean;
+  /**
+   * 是否渲染成**胶囊**（导航项、按钮用）。
+   *
+   * 胶囊是导航"能看出可以点、也能看出当前在哪"的关键：
+   * 纯文字链接在深色条上很难分辨可点性，也很难表达激活态。
+   * 胶囊的状态色由 `setActive` / 悬停驱动（见下方 `apply()`）。
+   */
+  pill?: boolean;
+  /** 胶囊的圆角（默认取高度一半，即全圆角）。 */
+  pillRadius?: number;
+  /** 激活时是否用 accent **实心**填充（按钮用）而不是"淡色底 + accent 字"。 */
+  solid?: boolean;
   /** 常态文字色（默认主题次级色）。 */
   color?: string;
 }
@@ -117,12 +159,12 @@ export interface LinkHandle {
 }
 
 /**
- * 可点链接：文字 + 悬停反馈 + 点击回调。
+ * 可点链接：文字 + 悬停反馈 + 点击回调（可选胶囊底）。
  *
  * 三种状态各自的作用（区分开才不会互相打架）：
- * - **常态**：次级色；
- * - **悬停**：正文色 + 可选下划线（`ICEHoverManager` 派发 `hoverchange`）；
- * - **激活**：accent 色（导航栏标记"当前所在区块"，滚动时自动切换）。
+ * - **常态**：次级色（胶囊时是极淡的底，几乎看不见）；
+ * - **悬停**：正文色 + 底变亮（`ICEHoverManager` 派发 `hoverchange`）；
+ * - **激活**：accent 色 —— 导航栏标记"当前所在区块"，滚动时自动切换。
  *
  * ⚠️ 读 `hoverchange` 的载荷要用 **`evt.param`**：`ICEWidget.setHovered()` 调的是
  * `trigger('hoverchange', null, { hovered })`，而 `trigger(name, originalEvent, param)`
@@ -146,13 +188,32 @@ export function createLink(parent: any, page: GamePageHandle, options: LinkOptio
   });
   parent.addChild(node, false);
 
+  /*
+   * 胶囊底必须先挂：挂载顺序 = 绘制顺序，后挂的盖在上面。
+   * （曾经试过先挂内容再往 `childNodes` 里 unshift —— 那是绕过引擎的挂载逻辑，
+   * 不设 `parentNode`、不走置脏，不能用。）
+   */
+  let pillNode: any = null;
+  if (options.pill) {
+    pillNode = new ICEPanel({
+      interactive: false,
+      left: 0,
+      top: 0,
+      width,
+      height: options.height,
+      radius: options.pillRadius ?? Math.round(options.height / 2),
+      style: { fillStyle: 'rgba(255,255,255,0.04)', strokeStyle: 'rgba(255,255,255,0)' },
+    });
+    node.addChild(pillNode, false);
+  }
+
   const label = new ICELabel({
     interactive: false,
-    left: options.align === 'center' || options.align === 'right' ? 0 : paddingX,
+    left: options.align === 'left' ? paddingX : 0,
     top: 0,
     width: options.align === 'left' ? width - paddingX * 2 : width,
     height: options.height,
-    align: options.align || 'left',
+    align: options.align || 'center',
     verticalAlign: 'middle',
     text: options.text,
     style: { fontSize, fillStyle: options.color || theme.colors.textSecondary },
@@ -184,18 +245,42 @@ export function createLink(parent: any, page: GamePageHandle, options: LinkOptio
   let hovered = false;
   let active = false;
 
-  /** 状态的唯一出口：改颜色/下划线只在这里，避免多处 setState 互相覆盖。 */
+  /** 状态的唯一出口：改色只在这里，避免多处 setState 互相覆盖。 */
   const apply = () => {
     label.setState({
       style: {
         ...label.state.style,
-        fillStyle: active
-          ? options.accent
-          : hovered
-            ? theme.colors.text
-            : options.color || theme.colors.textSecondary,
+        fillStyle: options.solid
+          ? // 实心按钮：文字只随悬停微微变化，激活与否都是浅色字（底已经足够明确）
+            hovered
+            ? '#ffffff'
+            : 'rgba(255,255,255,0.94)'
+          : active
+            ? options.accent
+            : hovered
+              ? theme.colors.text
+              : options.color || theme.colors.textSecondary,
       },
     });
+
+    if (pillNode) {
+      const fill = options.solid
+        ? hovered
+          ? 'rgba(13,110,253,1)'
+          : 'rgba(13,110,253,0.86)'
+        : active
+          ? 'rgba(13,110,253,0.20)'
+          : hovered
+            ? 'rgba(255,255,255,0.10)'
+            : 'rgba(255,255,255,0.04)';
+      const stroke = options.solid
+        ? 'rgba(122,178,255,0.85)'
+        : active
+          ? 'rgba(13,110,253,0.55)'
+          : 'rgba(255,255,255,0)';
+      pillNode.setState({ style: { ...pillNode.state.style, fillStyle: fill, strokeStyle: stroke } });
+    }
+
     if (underlineNode) underlineNode.setState({ display: hovered || active });
     page.ice.dirty = true;
   };

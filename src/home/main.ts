@@ -29,6 +29,17 @@ import { mountNavbar, NAVBAR, type NavbarHandle } from './navbar';
 /** 导航栏高度（引用 `navbar.ts` 的常量，避免两处各写一个数）。 */
 const NAVBAR_HEIGHT = NAVBAR.height;
 
+/*
+ * 把导航高度**写进 CSS 变量**。
+ *
+ * 页面的 `padding-top` 依赖这个值（要给固定的导航留出位置）。早先 CSS 与代码里各写了一个
+ * 数字（60 / 64），改了一处就错位 4px —— 而这类错位**肉眼几乎看不出来**，
+ * 只会在"内容被导航压住"时以几像素的偏差出现。
+ * 所以真相只有一份：代码里的 `NAVBAR.height`，CSS 变量由它写入
+ * （HTML 里那个值只是 JS 执行前的兜底）。
+ */
+document.documentElement.style.setProperty('--navbar-height', `${NAVBAR_HEIGHT}px`);
+
 /* --------------------------------- 版面常量 --------------------------------- */
 
 const CANVAS_WIDTH = 1180;
@@ -75,6 +86,24 @@ function chipWidth(text: string, fontSize = 11): number {
 }
 
 /**
+ * 把 `#rrggbb` 调亮/调暗（`amount` 为负则变暗）。
+ *
+ * 用途：按钮用"主色 → 略暗主色"的渐变比纯色更有体积感，而各游戏的主色是数据里给的，
+ * 得能在运行期派生出第二个色 —— 手写死一组颜色就失去"加了游戏自动适配"的意义。
+ * 只处理 `#rrggbb`（数据层已保证是这个格式）；其它形式原样返回。
+ */
+function shade(hex: string, amount: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((num >> 16) & 0xff) * (1 + amount));
+  const g = clamp(((num >> 8) & 0xff) * (1 + amount));
+  const b = clamp((num & 0xff) * (1 + amount));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
  * 画布高度 = hero + 各分组 + 页脚 + 底部留白。
  * 先算高度、写进 canvas 属性，**再**建引擎 —— 引擎初始化时读的就是这个尺寸
  * （顺序反了会拿到旧的初始高度，下面的卡片与页脚全被裁掉）。
@@ -115,7 +144,34 @@ const openLinkOutside = (url: string) => {
 
 const { games, machines, features } = stats();
 
-/** hero 左侧的品牌竖条：让页面有个明确的视觉起点（品牌名在吸顶导航里，这里不重复）。 */
+/*
+ * hero 背后的"光晕"：一层很淡的 accent 径向渐变。
+ *
+ * 深色页面最缺的是**层次**：一片纯暗底上放文字，看起来就像"没做完"。
+ * 画布里没有 CSS `box-shadow` / `filter`，所以"发光"就是叠一层低透明度的渐变面板。
+ * 渐变坐标用**画布绝对坐标**（引擎的 `createLinearGradient` 是命令式的，不接受相对铺展）。
+ */
+const heroGlow = page.ice.createRadialGradient(PAD + 220, PAD + 10, 10, PAD + 220, PAD + 10, 520);
+heroGlow.addColorStop(0, 'rgba(13, 110, 253, 0.20)');
+heroGlow.addColorStop(0.45, 'rgba(13, 110, 253, 0.06)');
+heroGlow.addColorStop(1, 'rgba(13, 110, 253, 0)');
+page.ice.addChild(
+  new ICEPanel({
+    id: 'hero-glow',
+    interactive: false,
+    left: 0,
+    top: 0,
+    width: CANVAS_WIDTH,
+    height: HEADER_HEIGHT + PAD,
+    radius: 0,
+    style: { fillStyle: heroGlow, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0, shadowBlur: 0 },
+  }),
+);
+
+/** hero 左侧的品牌竖条：渐变（accent → 亮青），让视觉起点更有质感。 */
+const heroBarGradient = page.ice.createLinearGradient(0, PAD + 6, 0, PAD + 48);
+heroBarGradient.addColorStop(0, '#5ac8fa');
+heroBarGradient.addColorStop(1, '#0b5ed7');
 page.ice.addChild(
   new ICEPanel({
     interactive: false,
@@ -124,7 +180,7 @@ page.ice.addChild(
     width: 5,
     height: 42,
     radius: 3,
-    style: { fillStyle: theme.colors.primary, strokeStyle: theme.colors.primary },
+    style: { fillStyle: heroBarGradient, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0 },
   }),
 );
 page.ice.addChild(
@@ -224,24 +280,50 @@ function renderCoverPlaceholder(card: any, game: GamePage): void {
 }
 
 /** 封面图：路径稳定（`covers/<slug>.png`），加载完引擎会自己置脏重绘。 */
-function renderCover(card: any, game: GamePage): void {
+function renderCover(card: any, game: GamePage): any {
   const src = coverUrl(game);
   if (!src) {
     renderCoverPlaceholder(card, game);
-    return;
+    return null;
   }
-  card.addChild(
-    new ICEImage({
-      id: `game-cover-${game.slug}`,
-      interactive: false,
-      left: COVER_INSET,
-      top: ROW.cover,
-      width: COVER_WIDTH,
-      height: COVER_HEIGHT,
-      src,
-    }),
-    false,
-  );
+  const cover = new ICEImage({
+    id: `game-cover-${game.slug}`,
+    interactive: false,
+    left: COVER_INSET,
+    top: ROW.cover,
+    width: COVER_WIDTH,
+    height: COVER_HEIGHT,
+    src,
+  });
+  card.addChild(cover, false);
+  return cover;
+}
+
+/**
+ * 封面上的"高光扫过"层：悬停时显示的一条斜向白色渐变。
+ *
+ * 画布上没有 CSS 的 `filter: brightness()`，所以"悬停变亮"要自己铺一层。
+ * 用**线性渐变 + 低 alpha** 比整体提高亮度更耐看：只提亮一部分，像玻璃反光。
+ * 渐变坐标是画布绝对坐标，所以四条停靠点按封面的横向范围算。
+ */
+function buildSheen(parent: any, left: number, top: number, width: number, height: number): any {
+  const sheen = page.ice.createLinearGradient(left, top, left + width, top + height);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.42, 'rgba(255,255,255,0.10)');
+  sheen.addColorStop(0.58, 'rgba(255,255,255,0.14)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  const node = new ICEPanel({
+    interactive: false,
+    left,
+    top,
+    width,
+    height,
+    radius: 10,
+    style: { fillStyle: sheen, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0, shadowBlur: 0 },
+  });
+  node.setState({ display: false });
+  parent.addChild(node, false);
+  return node;
 }
 
 function buildCard(game: GamePage, left: number, top: number): CardNodes {
@@ -274,13 +356,39 @@ function buildCard(game: GamePage, left: number, top: number): CardNodes {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     radius: CARD_RADIUS,
-    style: { fillStyle: 'rgba(0,0,0,0)', strokeStyle: game.accent },
+    style: { fillStyle: 'rgba(0,0,0,0)', strokeStyle: game.accent, lineWidth: 2 },
   });
   frame.setState({ display: false });
   card.addChild(frame, false);
 
+  /*
+   * 卡片顶部一条 accent 渐变小线（与吸顶导航的"霓虹线"呼应）。
+   * 两端收窄成透明，看起来像一道高光扫过卡片上沿，而不是给卡片加了个边框。
+   */
+  const cardTop = page.ice.createLinearGradient(0, 0, CARD_WIDTH, 0);
+  cardTop.addColorStop(0, 'rgba(0,0,0,0)');
+  cardTop.addColorStop(0.2, game.accent);
+  cardTop.addColorStop(0.8, game.accent);
+  cardTop.addColorStop(1, 'rgba(0,0,0,0)');
+  card.addChild(
+    new ICEPanel({
+      interactive: false,
+      left: 0,
+      top: 0,
+      width: CARD_WIDTH,
+      height: 2,
+      radius: 1,
+      style: { fillStyle: cardTop, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0, shadowBlur: 0 },
+    }),
+    false,
+  );
+
+  const cover = renderCover(card, game);
+  // 悬停时给封面加一层"反光"，读起来就是"这张卡被选中了"
+  const sheen = buildSheen(card, COVER_INSET, ROW.cover, COVER_WIDTH, COVER_HEIGHT);
+
   /**
-   * 悬停时显示高亮框。
+   * 悬停时显示高亮框与反光。
    *
    * ⚠️ 事件载荷的形状别猜：`ICEWidget.setHovered()` 调的是
    * `this.trigger('hoverchange', null, { hovered })`，而 `trigger(eventName, originalEvent, param)`
@@ -290,6 +398,7 @@ function buildCard(game: GamePage, left: number, top: number): CardNodes {
   card.on('hoverchange', (payload: any) => {
     const hovered = Boolean(payload && payload.param && payload.param.hovered);
     frame.setState({ display: hovered });
+    sheen.setState({ display: hovered });
     page.ice.dirty = true;
   });
 
@@ -356,15 +465,20 @@ function buildCard(game: GamePage, left: number, top: number): CardNodes {
     chipLeft += width + 6;
   }
 
+  // 「进入」按钮：accent 渐变（比纯色更有"可点"的暗示），文字用白色保证对比度
+  const btnLeft = CARD_WIDTH - COVER_INSET - BUTTON.width;
+  const btnGradient = page.ice.createLinearGradient(btnLeft, ROW.meta, btnLeft + BUTTON.width, ROW.meta + BUTTON.height);
+  btnGradient.addColorStop(0, game.accent);
+  btnGradient.addColorStop(1, shade(game.accent, -0.22));
   const button = new ICEButton({
     id: `game-enter-${game.slug}`,
-    left: CARD_WIDTH - COVER_INSET - BUTTON.width,
+    left: btnLeft,
     top: ROW.meta,
     width: BUTTON.width,
     height: BUTTON.height,
     text: '进入',
-    radius: 8,
-    style: { fillStyle: game.accent, strokeStyle: game.accent },
+    radius: 9,
+    style: { fillStyle: btnGradient, strokeStyle: 'rgba(255,255,255,0.22)' },
   });
   // 按钮点击走事件（构造函数不吃 `onClick`；`ICESegmented` 那类才走构造参数）
   button.on('click', () => goto(game.page));
@@ -412,10 +526,26 @@ let cursorY = PAD + HEADER_HEIGHT;
 const sectionAnchors: { key: string; label: string; canvasY: number }[] = [];
 
 for (const group of GROUPS) {
+  /** 分组标题前的小色块：一组一个色，扫读时能更快分出段落（比纯文字标题有节奏）。 */
+  const groupAccent = group.kind === 'game' ? theme.colors.primary : '#8b5cf6';
+  const groupBar = page.ice.createLinearGradient(0, cursorY + 2, 0, cursorY + 20);
+  groupBar.addColorStop(0, groupAccent);
+  groupBar.addColorStop(1, shade(groupAccent, -0.3));
+  page.ice.addChild(
+    new ICEPanel({
+      interactive: false,
+      left: PAD,
+      top: cursorY + 2,
+      width: 4,
+      height: 18,
+      radius: 2,
+      style: { fillStyle: groupBar, strokeStyle: 'rgba(0,0,0,0)', lineWidth: 0 },
+    }),
+  );
   page.ice.addChild(
     new ICELabel({
       interactive: false,
-      left: PAD,
+      left: PAD + 14,
       top: cursorY,
       width: 130,
       text: group.label,
@@ -425,9 +555,9 @@ for (const group of GROUPS) {
   page.ice.addChild(
     new ICELabel({
       interactive: false,
-      left: PAD + 118,
+      left: PAD + 132,
       top: cursorY + 6,
-      width: CANVAS_WIDTH - PAD * 2 - 118,
+      width: CANVAS_WIDTH - PAD * 2 - 132,
       text: `${group.blurb}　·　${group.items.length} 个`,
       style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
     }),

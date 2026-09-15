@@ -20,8 +20,12 @@
       也因此不需要响应式重排（本仓其它页面同样是"固定设计尺寸、窗口小了裁切"）。
     */
     :root {
-      /* 与 src/home/navbar.ts 的 NAVBAR.height 保持一致（改一处要同步另一处） */
-      --navbar-height: 60px;
+      /*
+        导航高度：**由 JS 写入**（`src/home/main.ts` 会 setProperty 覆盖这里）。
+        这里给的值只是 JS 执行前的兜底 —— 真相只有一份，在 `src/home/navbar.ts` 的
+        `NAVBAR.height`，避免 CSS 与代码各写一个数字后悄悄错位。
+      */
+      --navbar-height: 64px;
       --canvas-width: 1180px;
     }
 
@@ -33,7 +37,23 @@
       align-items: center;
       /* 顶部留出吸顶导航的位置，否则 hero 会被导航压住 */
       padding: calc(var(--navbar-height) + 20px) 0 40px;
-      background: radial-gradient(circle at 50% 12%, #1b2130 0%, #080a0f 60%);
+      /*
+        背景三层叠加（从下到上）：
+          ① 深色径向渐变 —— 页面主调；
+          ② 横向细线 + ③ 纵向细线 —— 一格 34px 的**极淡网格**。
+        网格是"游戏厅/竞技场"最省的暗示：透明度压到 0.03 以下，只在暗底上看出一层秩序感，
+        不会抢内容。用 CSS 而不是画在画布上：不占引擎的绘制开销，也不影响版面体检。
+      */
+      background-color: #080a0f;
+      background-image:
+        linear-gradient(rgba(120, 165, 255, 0.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 165, 255, 0.028) 1px, transparent 1px),
+        radial-gradient(circle at 50% 12%, #1b2130 0%, #080a0f 60%);
+      background-size:
+        34px 34px,
+        34px 34px,
+        100% 100%;
+      background-attachment: fixed, fixed, fixed;
     }
 
     /*
