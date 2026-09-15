@@ -147,16 +147,29 @@ export async function canvasStats(page: Page, canvasId = MAIN_CANVAS): Promise<C
 
 /**
  * 画布内部坐标 → 页面坐标。
- * 引擎按 `dpr` 把 backing store 放大过，所以不能直接拿内部坐标当 CSS 坐标点。
+ *
+ * 与引擎的 `screenToWorld` 逆变换一致：引擎把 `clientX - rect.left`（CSS 像素）经视口逆变换成
+ * 世界坐标（见 ice-render/src/event/input-normalize.ts + ICE.screenToWorld），所以
+ * 世界 → 页面 = `rect.left + 世界 × viewport.scale（+ tx）`。
+ *
+ * 之前用 `display/buffer` 比值近似，只在「缓冲 == 显示且无视口缩放」时成立。XP 页用 `viewport`
+ * 把 1440×900 设计世界缩进信箱缓冲后（2026-09-15 信箱边点击修复），必须读 `ice.viewport.scale`
+ * 才点得准；其它页 `viewport.scale === 1`、且缓冲 == 显示，结果与旧公式相同，不受影响。
  */
 export async function canvasPoint(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
   const box = await page.locator(`#${canvasId}`).boundingBox();
   if (!box) throw new Error(`#${canvasId} 还没有布局盒子`);
-  const size = await page.evaluate((id) => {
-    const canvas = document.getElementById(id) as HTMLCanvasElement;
-    return { width: canvas.width, height: canvas.height };
-  }, canvasId);
-  return { x: box.x + (x * box.width) / size.width, y: box.y + (y * box.height) / size.height };
+  const vp = await page.evaluate(() => {
+    const ice =
+      (window as any).__result?.ice ||
+      (window as any).__game?.page?.ice ||
+      (window as any).__arcade?.ice ||
+      (window as any).__gameHome?.ice ||
+      null;
+    const v = ice && ice.viewport ? ice.viewport : { scale: 1, tx: 0, ty: 0 };
+    return { scale: v.scale || 1, tx: v.tx || 0, ty: v.ty || 0 };
+  });
+  return { x: box.x + (x - vp.tx) * vp.scale, y: box.y + (y - vp.ty) * vp.scale };
 }
 
 /** 点画布上的一个**内部坐标**点（自动换算成页面坐标）。 */

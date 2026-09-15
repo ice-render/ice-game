@@ -33,6 +33,40 @@ import * as ICEWEB from 'ice-web-components';
       const TASKBAR_H = 36;
       const DESKTOP_H = SCREEN_H - TASKBAR_H;
 
+      /**
+       * ★ 信箱边（letterbox）下点击错位修复（2026-09-15）
+       *
+       * 根因：本页画布缓冲固定 1440×900（设计分辨率），但 index.html 用 CSS 把「显示尺寸」等比缩成
+       * 视口内 1.6 矩形（letterbox）。引擎的点击映射是 `clientX - rect.left`（CSS 像素）直接当世界坐标
+       * 用（见 ice-render/src/event/input-normalize.ts），前提是「缓冲 == 显示尺寸」。letterbox 下
+       * 缓冲(1440) ≠ 显示(如 1229)，于是点哪偏哪 —— 非 1.6 视口双击全落空。
+       *
+       * 修复（不动引擎源码，符合 ice-render 铁律）：让画布缓冲**始终等于显示尺寸**（fitCanvasToDisplaySize
+       * 已含 dpr），再用引擎视口把 1440×900 设计世界等比缩放进缓冲。这样点击 CSS 像素与缓冲 1:1，
+       * screenToWorld 再逆变换回设计坐标，命中正确。显示尺寸的数学与 index.html 的 CSS 完全一致。
+       */
+      const DESIGN_ASPECT = SCREEN_W / SCREEN_H; // 1.6
+      const applyLayout = () => {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // 取「塞进视口且保持 1.6 比例」的最大矩形（与 index.html 的 CSS min() 同一条数学）
+        const boxW = Math.min(vw, vh * DESIGN_ASPECT);
+        const boxH = boxW / DESIGN_ASPECT;
+        // 缓冲 = 显示尺寸（含 dpr）：点击映射的 CSS 像素与缓冲 1:1，信箱边不再错位
+        ice.fitCanvasToDisplaySize(boxW, boxH);
+        // 把 1440×900 设计世界等比缩放进缓冲；screenToWorld 会逆变换回设计坐标
+        ice.viewport.scale = boxW / SCREEN_W;
+        ice.viewport.tx = 0;
+        ice.viewport.ty = 0;
+        ice.dirty = true; // 触发整帧重绘（视口变化也会让静态层缓存失效）
+      };
+      applyLayout();
+      let __layoutRaf = 0;
+      window.addEventListener('resize', () => {
+        if (__layoutRaf) cancelAnimationFrame(__layoutRaf);
+        __layoutRaf = requestAnimationFrame(applyLayout);
+      });
+
       const toast = (text, type = 'success') => W.ICEMessage.show(ice, text, { type });
       const desktopBox = { left: 0, top: 0, width: SCREEN_W, height: DESKTOP_H };
       const XPFONT = 'Tahoma, "Microsoft YaHei", sans-serif';

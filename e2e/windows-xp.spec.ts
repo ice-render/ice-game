@@ -232,3 +232,47 @@ test.describe('Windows XP 桌面', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/**
+ * 信箱边（letterbox）多视口回归（2026-09-15）。
+ *
+ * 修复前：XP 页画布缓冲固定 1440×900，index.html 用 CSS 把**显示尺寸**等比缩成视口内 1.6
+ * 矩形（letterbox）。引擎的点击映射是 `clientX - rect.left`（CSS 像素）直接当世界坐标
+ * 用（见 ice-render/src/event/input-normalize.ts），前提是「缓冲 == 显示尺寸」。letterbox 下
+ * 缓冲(1440) ≠ 显示(如 1229)，于是点哪偏哪 —— 非 1.6 视口双击全落空（线上实测 1366×768 /
+ * 1280×720 / 1920×1080 / 竖屏 / 手机全红）。
+ *
+ * 修复后：缓冲始终跟随显示尺寸、设计世界经 `ice.viewport.scale` 缩放，任意视口都应可交互。
+ * 这里逐视口验证「开机到桌面 + 双击打开扫雷」，防止信箱边点击再次错位。
+ */
+test.describe('Windows XP 信箱边多视口回归', () => {
+  const VIEWPORTS = [
+    { width: 1366, height: 768 },
+    { width: 1280, height: 720 },
+    { width: 1920, height: 1080 },
+    { width: 1024, height: 1366 },
+    { width: 820, height: 1180 },
+    { width: 390, height: 844 },
+  ];
+  for (const vp of VIEWPORTS) {
+    test.describe(`${vp.width}x${vp.height}`, () => {
+      test.use({ viewport: vp });
+      test('开机到桌面并双击打开扫雷', async ({ page }) => {
+        const errors = collectErrors(page, { allowedNotFound: ALLOWED_NOT_FOUND });
+        await page.addInitScript({ content: RECT_HELPER });
+        await page.goto('/windows-xp.html');
+        await bootToDesktop(page);
+        await expectCanvasPainted(page, 0.08);
+        await page.evaluate((order) => {
+          const index = order.indexOf('minesweeper');
+          const tile = (window as any).__result.iconTiles[index];
+          (window as any).__minesweeperRect = (window as any).__rect(tile);
+        }, ICON_ORDER);
+        const rect = await page.evaluate(() => (window as any).__minesweeperRect);
+        await dblclickCanvas(page, rect.left + rect.width / 2, rect.top + rect.height / 2);
+        await page.waitForFunction(() => (window as any).__result.openWindows.has('minesweeper'));
+        expect(errors).toEqual([]);
+      });
+    });
+  }
+});
