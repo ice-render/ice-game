@@ -16,11 +16,13 @@
     "sync:upstream": "node scripts/sync-upstream.mjs",
     "types:check": "tsc --noEmit",
     "test": "jest --runInBand",
+    "check:wiring": "node scripts/check-wiring.cjs",
     "test:e2e": "npm run build && playwright test",
     "screenshots": "node scripts/shoot-screenshots.mjs",
-    "verify": "npm run types:check && npm test && npm run build"
+    "verify": "npm run types:check && npm test && npm run check:wiring && npm run build"
   },
   "dependencies": {
+    "@damoqiongqiu/ice-chart": "file:../ice-chart",
     "ice-render": "file:../ice-render",
     "ice-web-components": "file:../ice-web-components"
   },

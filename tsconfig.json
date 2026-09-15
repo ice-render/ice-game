@@ -16,22 +16,27 @@
     /**
      * 类型层也要把兄弟包钉死，理由和 `webpack.config.js` 里的 `resolve.alias` 完全一样：
      *
-     * `ice-web-components` 是指向兄弟仓的**软链**，而那个仓自己的 `node_modules` 里还躺着一份
-     * 从 npm 装的 `ice-render`（2.10.0）。于是 tsc 会解析出**两份 `.d.ts`** ——
-     * 本仓 `src/` 用 2.10.1 的声明，`dist/types/**` 内部用 2.10.0 的声明。引擎的
-     * `ICELayoutManager` 带私有成员，两份声明就是两个互不兼容的名义类型，报错长这样：
+     * 兄弟包是指向同级仓库的**软链**，而每个兄弟仓自己的 `node_modules` 里还躺着一份
+     * 从 npm 装的 `ice-render`（实测 ice-web-components 带 2.10.0、ice-chart 带 2.10.1）。
+     * 于是 tsc 会解析出**两份 `.d.ts`** —— 本仓 `src/` 用 A 版声明，兄弟包的
+     * `dist/types/**` 内部用 B 版声明。引擎的 `ICELayoutManager` 带私有成员，
+     * 两份声明就是两个互不兼容的名义类型，报错长这样：
      *   `Argument of type 'ICEBoxLayout' is not assignable to parameter of type 'ICELayoutManager'.
      *    Types have separate declarations of a private property '__warnedConstraints'.`
      * 而 webpack 侧已经钉成一份了 —— 也就是"类型说不行、构建却成功"，这种不一致最费时间。
      *
+     * **三件套都要钉，漏一个就复现**：ice-render / ice-web-components / @damoqiongqiu/ice-chart。
+     * 带 scope 的包用它的**完整包名**当 key。
+     *
      * 指向**构建产物**而不是 `src/`：这一层对齐的是"应用仓按发布版本消费引擎"，
      * 顺带避免本仓的门禁去审兄弟仓的源码（那属于它们自己的门禁）。
-     * 前提是两个兄弟包都已 `npm run build`（本来也是 webpack 的前置条件）。
+     * 前提是兄弟包都已 `npm run build`（本来也是 webpack 的前置条件）。
      */
     "baseUrl": ".",
     "paths": {
       "ice-render": ["../ice-render/dist/types/index.d.ts"],
-      "ice-web-components": ["../ice-web-components/dist/types/index.d.ts"]
+      "ice-web-components": ["../ice-web-components/dist/types/index.d.ts"],
+      "@damoqiongqiu/ice-chart": ["../ice-chart/dist/types/index.d.ts"]
     }
   },
   "include": ["src", "tests", "e2e", "playwright.config.ts"]

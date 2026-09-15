@@ -32,12 +32,43 @@ ICE 家族的**游戏厅**：把 `ice-web-components` 的画布控件拼成能�
 `main.ts` 里 `@ts-nocheck` 是**有意**的：上游正文是 JS，"保持逐字"比"通过 strict 检查"重要。
 本仓的类型门禁落在 `src/domain`（纯逻辑）与 `src/home`（自己写的画布首页）上。
 
-### 2. webpack 必须钉死两个兄弟包
+### 2. 家族三件套的依赖与 alias —— 加依赖时按固定顺序，别漏 alias
 
-`ice-render` 与 `ice-web-components` 是**并列的兄弟仓库**，各自 `node_modules` 里还躺着一份
-自己装的引擎。不钉死就会打出**多份 `ice-render` 实例**，`typeId` 注册表 / `instanceof` /
-事件总线全错位（表现：组件画不出来）。见 `webpack.config.js` 的 `family` alias。
-**两个包都要钉，别只钉引擎。**
+`package.json` 的 dependencies 声明三个家族包（与 `ice-smart-water` 同模式）：
+
+```jsonc
+"@damoqiongqiu/ice-chart": "file:../ice-chart",      // 图表（做新游戏会用到）
+"ice-render": "file:../ice-render",                  // 引擎
+"ice-web-components": "file:../ice-web-components"   // 画布控件 + 游戏模型
+```
+
+它们在本机是**并列的兄弟仓库**，各自 `node_modules` 里还躺着一份自己装的引擎
+（实测 ice-web-components 带 2.10.0、ice-chart 带 2.10.1）。所以：
+
+**加一个新家族依赖的顺序固定为 ①→②→③，缺一个都不行：**
+
+1. `package.json` → `"file:../<repo>"`（npm 装成软链；带 scope 的包写完整包名）
+2. `webpack.config.js` → `family` alias（打包时只留一份引擎）
+3. `tsconfig.json` → `paths` 指向 `../<repo>/dist/types/index.d.ts`（类型层同口径）
+
+只配 ①② 会让 **tsc 报"类型不兼容"而 webpack 却构建成功**（两份 `.d.ts`，
+`ICELayoutManager` 带私有成员 → 互不兼容的名义类型），这种不一致最费时间。
+
+**门禁已经替你守着（三道，都在 `npm run verify` 里）：**
+
+| 断言 | 在哪 | 抓什么 |
+|---|---|---|
+| 配置自检 | `webpack.config.js` 加载期 | ① 加了但 ② 漏了 → 直接抛错 |
+| 单份引擎 | `SingleEnginePlugin`（每次构建都跑，零额外成本） | 某个包被打进 2 份以上 → 构建失败 |
+| 接线冒烟 | `npm run check:wiring` | 未被页面 import 的依赖（如当前的 `ice-chart`）也要真的能打包 |
+
+判据只有一份实现：`scripts/lib/family-guard.cjs`（插件与脚本共用）。
+**改造它之前先看那个文件顶部的实测记录** —— 这条判据在开发中静默失效过（构建全绿、
+画面空白），两个真实错法（守护名单从 alias 表推导、带 scope 的包只按包名匹配）都记在那里，
+`check-wiring.cjs` 里有对应的回归自测（改坏了会红）。
+
+⚠️ 判据类代码必须做**敏感度自检**：把它故意改坏（或喂合成路径），确认它真的会红。
+"门禁是绿的"本身不构成证据 —— 今天这条判据两次绿着漏判。
 
 ### 3. `ice.addChild(node, false)` 会**清掉** dirty —— 收尾必须补 `ice.dirty = true`
 
@@ -61,11 +92,12 @@ ICE 家族的**游戏厅**：把 `ice-web-components` 的画布控件拼成能�
 ## 门禁
 
 ```bash
-npm run types:check   # tsc --noEmit（含 e2e 与首页）
+npm run types:check   # tsc --noEmit（含 e2e、首页、tests/wiring 的跨包类型断言）
 npm test              # jest：只覆盖 src/domain 深逻辑，不需要引擎产物 / jsdom
+npm run check:wiring  # 家族三件套接线：真打一次包，断言每个包只进来一份
 npm run build         # webpack 三入口
 npm run test:e2e      # 先自动 build，再真 Chrome 跑三个页面
-npm run verify        # types:check + test + build
+npm run verify        # types:check + test + check:wiring + build
 ```
 
 e2e 的判据分三层（**缺一层就会出现"看起来通过其实没验证"**）：

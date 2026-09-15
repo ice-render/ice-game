@@ -43,13 +43,33 @@ npm run serve           # http://localhost:8097
 门禁：
 
 ```bash
-npm run types:check   # tsc --noEmit
+npm run types:check   # tsc --noEmit（含跨包类型接线断言）
 npm test              # jest：纯业务层（src/domain），不需要引擎产物也不需要 jsdom
+npm run check:wiring  # 家族三件套接线：真的打一次包，断言每个包只进来一份
 npm run build         # webpack 三入口
 npm run test:e2e      # 真 Chrome 逐页跑：像素 + 真交互
 npm run screenshots   # 重抓 README 的截图（改过版面就要重跑，别手截）
-npm run verify        # types:check + test + build
+npm run verify        # types:check + test + check:wiring + build
 ```
+
+### 依赖：家族三件套（为继续做新游戏而备）
+
+```jsonc
+"dependencies": {
+  "@damoqiongqiu/ice-chart": "file:../ice-chart",        // 图表
+  "ice-render": "file:../ice-render",                    // 引擎
+  "ice-web-components": "file:../ice-web-components"     // 画布控件 + 游戏模型
+}
+```
+
+三个包都是 `file:` 软链到同级仓库（与 [ice-smart-water](https://github.com/ice-render/ice-smart-water) 同模式）：
+改完兄弟仓 `npm run build`，本工程立刻吃到新产物。
+
+> **`ice-chart` 目前还没有页面用它**（是给接下来的游戏备的），所以它的接线属于"未被使用的依赖"——
+> 容易在第一次真用的时候才发现是断的。`npm run check:wiring` 专门为此存在：
+> 它用 `tests/wiring/family-smoke.ts` 当入口真的打一次包，把所有家族包拉进模块图，
+> 断言 tsconfig paths 存在、`node_modules` 是软链、**每个包只进来一份**。
+> 产物体积是最直观的指标：正常 1008 KiB，多两份引擎会涨到 1.49 MiB。
 
 ## 3. 工程结构
 
@@ -63,9 +83,13 @@ ice-game/
 │     └─ windows-xp/             ← 从上游抽取（生成物，勿手改）
 ├─ scripts/
 │  ├─ sync-upstream.mjs          抽取器：上游 examples/*.html → src/games/<name>/
+│  ├─ check-wiring.cjs           接线门禁：三件套真的能一起打包、每个包只一份
+│  ├─ lib/family-guard.cjs       "只进来一份"的判据（插件与脚本共用）
 │  └─ shoot-screenshots.mjs      截图器：真 Chrome 跑一遍再截图
-├─ e2e/                          Playwright：像素 + 真鼠标 / 真键盘
-└─ tests/domain/                 jest：目录层单测
+├─ tests/
+│  ├─ domain/                    jest：目录层单测
+│  └─ wiring/family-smoke.ts     接线冒烟入口（类型断言 + 把三件套拉进模块图）
+└─ e2e/                          Playwright：像素 + 真鼠标 / 真键盘
 ```
 
 ### 三个入口，不是一个 HTML 里的三个页签
@@ -92,8 +116,11 @@ ice-game/
 **推论**：拷贝之后两个工程是分叉的。上游修了 `arcade.html` 的 bug，ice-game 不会自动拿到 ——
 这是有意的（本仓要能自由改版面），跟随上游就是重跑那条命令。
 
-打包侧：`webpack.config.js` 把 `ice-render` 与 `ice-web-components` **都** `resolve.alias` 到同级
-兄弟仓库目录，强制全工程只有一份 `ice-render`（否则 `typeId` 注册表与事件总线会错位）。
+打包侧：`webpack.config.js` 把家族包**都** `resolve.alias` 到同级兄弟仓库目录，强制全工程只有一份
+`ice-render`；`tsconfig.json` 的 `paths` 做同一件事（不钉的话 tsc 会解析出两份 `.d.ts`，
+报 `ICELayoutManager` 私有成员不兼容 —— 而 webpack 却能构建成功）。
+加新依赖时的顺序是：`package.json` 加 `file:` 依赖 → 加 `family` alias → 加 `paths`；
+漏了 alias 会在**配置加载期**直接抛错（而不是静默多打一份引擎）。
 
 ## 5. 测试口径
 
