@@ -374,11 +374,35 @@ module.exports = (env, argv) => {
     },
     optimization: {
       /**
-       * **不抽公共 chunk**：每个页面各自独立，同一时刻只加载一个。
-       * 抽出一份 shared bundle 只会让「打开一页」多一次请求，还会把互不相干的
-       * 页面的加载顺序绑在一起。
+       * **抽一份共享的家族包 chunk**（`family.<hash>.js`），含 ice-render / ice-web-components / ice-chart。
+       *
+       * 早期这里是 `splitChunks: { chunks: () => false }`，理由写的是"每页独立、抽公共包只会多一次请求"。
+       * 但那个理由对 ice-game 不成立：每个页面 ~780KiB 里 **~771KiB 都是家族包**
+       * （ice-render 283 + ice-web-components 488），抽成一份共享 chunk 之后：
+       *  - 浏览器只下载一次、跨四个页面缓存 → 逛完整个站的总传输从 3.1MiB 降到 ~1.2MiB；
+       *  - 单引擎守护不受影响：`splitChunks` 只重排**输出 chunk**、不动**模块图**，
+       *    `SingleEnginePlugin` 仍按模块 `resource` 数出每个家族包 1 份（见 family-guard.cjs）；
+       *  - GitHub Pages 走 HTTP/2，多一个并行请求的成本可忽略。
+       *
+       * 这正是 smart-water 单入口天然享有的「共享」，ice-game 多入口需要显式抽出来才能得到。
+       * `test` 复用与单引擎守护同一套 `FAMILY_MARKERS`，避免两处各写一份路径正则。
        */
-      splitChunks: { chunks: () => false },
+      splitChunks: {
+        cacheGroups: {
+          family: {
+            test: (module) => {
+              const r = module.resource;
+              if (!r) return false;
+              return Object.values(FAMILY_MARKERS).some((markers) =>
+                markers.some((marker) => r.includes(marker.slice(0, -1))),
+              );
+            },
+            name: 'family',
+            chunks: 'all',
+            priority: 20,
+          },
+        },
+      },
       runtimeChunk: false,
     },
     performance: { hints: false },

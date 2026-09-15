@@ -212,7 +212,10 @@ function smokeConfig() {
   cfg.plugins = cfg.plugins.filter((p) => p.constructor.name !== 'HtmlWebpackPlugin');
   cfg.output = {
     path: path.join(os.tmpdir(), 'ice-game-wiring'),
-    filename: 'family-smoke.js',
+    // 必须用 [name] 模板：主配置现在会抽一份 `family` 共享 chunk，冒烟打包会有
+    // `family-smoke` 入口 chunk + `family` 共享 chunk 两个产物；写死成同一个固定名
+    // 会让两个 chunk 抢同一个文件名而冲突（以前 splitChunks 关闭时只有一个 chunk 才没问题）。
+    filename: '[name].js',
     publicPath: '',
     clean: true,
   };
