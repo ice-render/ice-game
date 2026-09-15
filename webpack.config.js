@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { buildMarkers, collectCopies, findDuplicates, describeDuplicates } = require('./scripts/lib/family-guard.cjs');
+const { scanAll } = require('./scripts/lib/scan-games.cjs');
 
 const WORKSPACE = path.resolve(__dirname, '..');
 
@@ -121,23 +122,39 @@ class SingleEnginePlugin {
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
+  /**
+   * **扫目录得到全部页面** —— 新增游戏不需要改这个文件。
+   *
+   * 扫描与校验的唯一实现在 `scripts/lib/scan-games.cjs`（`gen-catalog` / `check-games` 共用同一份），
+   * 所以"构建收了哪些页面"与"首页列了哪些页面"永远不会各说各话。
+   * 元数据非法（slug 不一致、kind 不符、字段缺失…）会在这里**直接抛错**，而不是打包一个坏页面。
+   */
+  const { items: pages, errors: scanErrors } = scanAll(__dirname);
+  if (scanErrors.length) {
+    throw new Error(`页面元数据有问题，先修好再构建：\n  - ${scanErrors.join('\n  - ')}`);
+  }
+  const games = pages.filter((p) => p.partition === 'games');
+  const ported = pages.filter((p) => p.partition === 'ported');
+
   return {
     /**
-     * **三个入口 = 三个 HTML**，而不是一个 HTML 里的三个页签。
+     * **一个页面 = 一个入口 = 一个 HTML**，而不是一个 HTML 里的多个页签。
      *
      * 与 ice-smart-water（单 HTML + 页签）有意不同：那是一个业务系统的多个模块，共用一套
-     * 工况 / 筛选状态；这里是**三台互不相干的机器**（游戏厅首页、掌机、XP 桌面），
-     * 各自独占整屏、独占键盘、各自有开机自检这类一次性流程 —— 硬塞进一个页面里，
-     * 只会让「切页要重建整台机器」比「开个新页面」更贵。
+     * 工况 / 筛选状态；这里每个游戏都独占整屏与键盘、彼此零共享状态 ——
+     * 硬塞进一个页面，只会让「切页要重建整个游戏」比「开个新页面」更贵。
+     *
+     * entry 与 HtmlWebpackPlugin 都由上面的扫目录结果生成：
+     * - 小游戏（`src/games/*`）→ 共用 `src/templates/page.html`，标题/尺寸/背景由 meta.json 注入
+     * - 上游移植（`src/ported/*`）→ 用各自的 index.html（那是从上游逐字抽取的骨架，不能统一）
      */
     entry: {
       home: path.resolve(__dirname, 'src/home/main.ts'),
-      arcade: path.resolve(__dirname, 'src/games/arcade/main.ts'),
-      'windows-xp': path.resolve(__dirname, 'src/games/windows-xp/main.ts'),
+      ...Object.fromEntries(pages.map((p) => [p.chunk, p.entry])),
     },
     output: {
       path: path.resolve(__dirname, 'dist'),
-      // 三个 HTML 都落在 dist 根，chunk 也在根 —— `publicPath: ''` 下相对路径全部成立，
+      // 所有 HTML 都落在 dist 根，chunk 也在根 —— `publicPath: ''` 下相对路径全部成立，
       // 换成子目录就要处理 `../`，没有必要。
       publicPath: '',
       filename: isProd ? '[name].[contenthash:8].js' : '[name].js',
@@ -165,26 +182,46 @@ module.exports = (env, argv) => {
     plugins: [
       // 构建期断言"每个家族包只进来一份产物"（多份引擎 = 组件静默画不出来）
       new SingleEnginePlugin(),
+      // 游戏厅首页（自己写的骨架）
       new HtmlWebpackPlugin({ template: 'src/home/index.html', filename: 'index.html', chunks: ['home'] }),
-      new HtmlWebpackPlugin({ template: 'src/games/arcade/index.html', filename: 'arcade.html', chunks: ['arcade'] }),
-      new HtmlWebpackPlugin({
-        template: 'src/games/windows-xp/index.html',
-        filename: 'windows-xp.html',
-        chunks: ['windows-xp'],
-      }),
+      // 自研小游戏：共用模板 + meta.json 注入
+      ...games.map(
+        (g) =>
+          new HtmlWebpackPlugin({
+            template: path.resolve(__dirname, 'src/templates/page.html'),
+            filename: g.page,
+            chunks: [g.chunk],
+            templateParameters: {
+              title: g.meta.title,
+              width: g.meta.width,
+              height: g.meta.height,
+              background: g.meta.background,
+            },
+          }),
+      ),
+      // 上游移植的整机：各自带骨架（逐字抽取的 style + canvas），不套共用模板
+      ...ported.map(
+        (p) =>
+          new HtmlWebpackPlugin({
+            template: path.join(p.dir, 'index.html'),
+            filename: p.page,
+            chunks: [p.chunk],
+          }),
+      ),
     ],
     devServer: {
-      // 8097：家族端口分配见 playwright.config.ts 顶部注释（8096 在本机被别的服务占着）
-      port: 8097,
+      // 8098：家族端口分配见 playwright.config.ts 顶部注释；
+      // 本机 8096/8097 被无关常驻服务占着，撞了可以用 ICE_GAME_PORT 覆盖
+      port: Number(process.env.ICE_GAME_PORT || 8098),
       open: false,
       hot: false,
-      // 三个入口互相独立，没有 history 路由，走默认的静态中间件即可
+      // 每个页面互相独立，没有 history 路由，走默认的静态中间件即可
       historyApiFallback: false,
     },
     optimization: {
       /**
-       * **不抽公共 chunk**：三个页面各自独立，同一时刻只加载一个。
-       * 抽出一份 shared bundle 只会让「打开一页」多一次请求，还会把三个互不相干的
+       * **不抽公共 chunk**：每个页面各自独立，同一时刻只加载一个。
+       * 抽出一份 shared bundle 只会让「打开一页」多一次请求，还会把互不相干的
        * 页面的加载顺序绑在一起。
        */
       splitChunks: { chunks: () => false },

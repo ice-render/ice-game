@@ -2,27 +2,34 @@
 <html lang="zh-CN">
   <meta charset="utf-8" />
   <title>ICE Game — 画布游戏厅</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>" />
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>"
+  />
   <style>
-    html,
-    body {
-      height: 100%;
-    }
+    /*
+      首页是**唯一允许纵向滚动**的页面：它要把几十张卡片铺完，
+      画布高度由内容算出来（见 src/home/main.ts 的 measureCanvasHeight）。
+      游戏页则相反 —— 固定画布 + 居中裁切，因为游戏版面不该跟着窗口重排。
+    */
     body {
       margin: 0;
+      min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      background: radial-gradient(circle at 50% 24%, #1b2130 0%, #080a0f 72%);
+      padding: 28px 0 48px;
+      background: radial-gradient(circle at 50% 12%, #1b2130 0%, #080a0f 60%);
     }
     canvas {
       display: block;
+      border-radius: 14px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
     }
   </style>
   <body>
-    <canvas id="canvas" width="1180" height="760"></canvas>
+    <canvas id="canvas" width="1180" height="620"></canvas>
 
-    <!-- 入口脚本由 html-webpack-plugin 注入（defer，DOM 就绪后执行） -->
+    <!-- 画布尺寸（宽/高）由 main.ts 按目录内容算出后设置，这里的值只是初始占位 -->
   </body>
 </html>

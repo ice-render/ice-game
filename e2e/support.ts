@@ -128,10 +128,22 @@ window.__rect = function (node) {
 };
 `;
 
-/** 断言"画布上确实画出了界面"，而不是一片空白。 */
-export async function expectCanvasPainted(page: Page, minInk = 0.02, index = 0) {
-  const stats = await canvasStats(page, index);
-  expect(stats.opaqueRatio, '画上去的像素占比（画布默认透明）').toBeGreaterThan(0.5);
+/**
+ * 断言"画布上确实画出了界面"，而不是一片空白。
+ *
+ * @param minInk   与主色明显不同的像素占比下限（实测正常页面 0.5%~70%）
+ * @param minOpaque 画上去的像素占比下限。**默认 0.5 只适用于"铺满画布"的页面**
+ *   （整机、游戏页都有全屏底色或全屏遮罩）。像游戏厅首页那样"画布透明、只画卡片"的版面，
+ *   卡片本身只占画布面积的两三成，必须把这个值调低 —— 否则断言会因为"版面留白"而误报。
+ */
+export async function expectCanvasPainted(
+  page: Page,
+  minInk = 0.02,
+  options: { minOpaque?: number; index?: number } = {},
+) {
+  const minOpaque = options.minOpaque ?? 0.5;
+  const stats = await canvasStats(page, options.index ?? 0);
+  expect(stats.opaqueRatio, '画上去的像素占比（画布默认透明）').toBeGreaterThan(minOpaque);
   expect(stats.inkRatio, `与主色不同的像素占比，实测 ${stats.inkRatio.toFixed(4)}`).toBeGreaterThan(minInk);
   expect(stats.colors, '不同颜色数').toBeGreaterThan(8);
   return stats;

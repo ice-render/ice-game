@@ -1,0 +1,99 @@
+{
+  "pages": [
+    {
+      "slug": "breakout",
+      "kind": "game",
+      "title": "打砖块",
+      "tagline": "挡板接球，清空所有砖块 —— 掉球扣命，三命用完结束",
+      "accent": "#0dcaf0",
+      "features": [],
+      "controls": [
+        [
+          "← →",
+          "移动挡板"
+        ],
+        [
+          "空格",
+          "发球"
+        ],
+        [
+          "P",
+          "暂停 / 继续"
+        ],
+        [
+          "R",
+          "重新开始"
+        ]
+      ],
+      "page": "breakout.html"
+    },
+    {
+      "slug": "arcade",
+      "kind": "machine",
+      "title": "ICE Arcade 掌机",
+      "tagline": "一台掌机，四张卡带 —— 开机先跑 BIOS 自检再选卡带",
+      "accent": "#0d6efd",
+      "features": [
+        "俄罗斯方块",
+        "贪吃蛇",
+        "2048",
+        "CHIP-8"
+      ],
+      "controls": [
+        [
+          "方向键",
+          "移动 / 旋转"
+        ],
+        [
+          "空格",
+          "硬降 / 暂停"
+        ],
+        [
+          "P · R · L",
+          "暂停 · 重开 · 排行榜"
+        ],
+        [
+          "F2",
+          "回到 BIOS 菜单"
+        ]
+      ],
+      "page": "arcade.html"
+    },
+    {
+      "slug": "windows-xp",
+      "kind": "machine",
+      "title": "Windows XP 桌面",
+      "tagline": "会自己开机的画布桌面：开机自检 → 欢迎屏 → 桌面",
+      "accent": "#245edb",
+      "features": [
+        "扫雷",
+        "ICE Arcade",
+        "记事本",
+        "画图",
+        "我的电脑",
+        "我的文档",
+        "Internet Explorer",
+        "显示属性"
+      ],
+      "controls": [
+        [
+          "双击图标",
+          "打开程序"
+        ],
+        [
+          "拖标题栏",
+          "移动窗口"
+        ],
+        [
+          "开始菜单",
+          "注销 / 关机"
+        ],
+        [
+          "右键雷区",
+          "插旗 / 问号"
+        ]
+      ],
+      "page": "windows-xp.html"
+    }
+  ]
+}

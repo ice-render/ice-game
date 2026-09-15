@@ -1,152 +1,131 @@
 /**
- * 游戏厅首页 —— 本工程唯一"自己写的"页面（另外两个页面是从上游逐字抽取的）。
+ * 游戏厅首页 —— 本工程唯一"自己写的非游戏页面"，把目录铺成网格。
  *
- * 它只做一件事：把 `src/domain/game-catalog.ts` 里的目录铺成两张卡片，点进去就是那台机器。
- * 首页与游戏页共用引擎，所以它是本仓的**集成冒烟**：这里能画出来，说明 webpack 的 alias
- * 钉对了、引擎与组件库是同一份实例。
+ * 它做三件事：① 从 `src/domain/catalog.ts` 取分组；② 按列宽自动换行铺卡片；
+ * ③ 点卡片/按钮进对应页面。**加一个新游戏不需要改这个文件** —— 目录一变，这里自动多一张卡。
  *
- * 版面一律由常量 + 栈式排布算出，不手写坐标：
- * 卡片内所有子节点都是**卡片局部坐标**（`left: 28, top: …`），因为卡片自己已经在绝对位置上。
+ * 版面是**流式 + 网格**：纵向游标自上而下走，每个分组是"一栏卡片"，栏内按列数换行
+ * （与 `ice-web-components/examples/gallery.html` 的 "clusters wrap like shelves" 同一思路）。
+ * 所以卡片数量涨到几十张时不需要动布局代码，只需要页面能滚。
+ *
+ * 画布高度**按内容算**（不是写死的 800）：内容多高画布就多高，页面纵向滚动。
+ * 这是"大量游戏"下的必然选择 —— 固定画布要么裁掉卡片，要么逼每张卡缩成一小条。
  */
-import { ICE, ICEBoxLayout } from 'ice-render';
-import {
-  ICE_ARCADE_THEME,
-  ICEButton,
-  ICEHoverManager,
-  ICELabel,
-  ICEPanel,
-  ICEWidget,
-  getICEFocusManager,
-  iceUIManager,
-} from 'ice-web-components';
-import { GAMES, catalogSize, type GameEntry } from '../domain/game-catalog';
+import { ICEButton, ICELabel, ICEPanel } from 'ice-web-components';
+import { GROUPS, PAGES, stats, type GamePage } from '../domain/catalog';
+import { createPage, type GamePageHandle } from '../kit';
 
 /* --------------------------------- 版面常量 --------------------------------- */
 
-/** 设计尺寸：与掌机页同宽，窗口小了整页裁切（演示页，不做响应式重排）。 */
-const CANVAS = { width: 1180, height: 760 };
-const SHELL = { left: 24, top: 24, width: 1132, height: 712 };
-/** 卡片区左右各留 40，两张卡片夹 28 的缝 —— 全部由这三个数推出来，不出现第三个魔数。 */
-const INNER_PAD = 40;
-const CARD_GAP = 28;
-const CARD = {
-  top: 164,
-  width: (SHELL.width - INNER_PAD * 2 - CARD_GAP) / 2,
-  height: 496,
-};
-/** 卡片内缩与行距：卡片内是局部坐标，起点就是内缩量。 */
-const PAD = 28;
-const ITEMS_TOP = 122;
-const ITEM_COLS = 2;
-const ITEM_ROW_H = 28;
-const ITEM_H = 24;
-const CONTROLS_TOP = 280;
-const CONTROL_ROW_H = 24;
+const CANVAS_WIDTH = 1180;
+const PAD = 44;
+const COLS = 3;
+const GAP = 20;
+const CARD_HEIGHT = 180;
+const HEADER_HEIGHT = 132;
+const GROUP_HEADER_HEIGHT = 52;
+const GROUP_GAP = 18;
+/** 最小画布高度：内容少时不至于挤成一条，也不至于留下大片空白。 */
+const MIN_CANVAS_HEIGHT = 620;
 
-const ice = new ICE().init('canvas', { dpr: (typeof window !== 'undefined' && window.devicePixelRatio) || 1 });
-iceUIManager.registerTheme('arcade', ICE_ARCADE_THEME).setTheme('arcade', ice);
-const theme = iceUIManager.getTheme();
+const CARD_WIDTH = Math.floor((CANVAS_WIDTH - PAD * 2 - GAP * (COLS - 1)) / COLS);
 
-new ICEHoverManager(ice).start();
-getICEFocusManager(ice).start();
-
-/* --------------------------------- 工具 --------------------------------- */
-
-const goto = (page: string) => {
-  window.location.href = page;
-};
+/** chip 宽度估算：CJK 一字约 1em，ASCII 约 0.58em，再加左右内边距。 */
+function chipWidth(text: string, fontSize = 12): number {
+  let width = 0;
+  for (const ch of text) width += /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? fontSize : fontSize * 0.58;
+  return Math.ceil(width) + 20;
+}
 
 /**
- * 累加 `left/top` 得到世界坐标（相对画布）。
- * 终止条件是 `cursor.state` 而不是 `cursor`：`ICE` 实例本身没有 `state`，
- * `while (cursor) { …; cursor = cursor.parentNode }` 到根上会读到 `state.left` 而崩。
+ * 画布高度 = 头部 + 各分组 + 底部留白。
+ * 先算高度、写进 canvas 属性，**再**建引擎 —— 引擎初始化时读的就是这个尺寸
+ * （顺序反了会拿到旧的 800 高，下面的卡片全被裁掉）。
  */
-function worldRect(node: any): { left: number; top: number; width: number; height: number } {
-  let left = 0;
-  let top = 0;
-  let cursor = node;
-  while (cursor && cursor.state) {
-    left += cursor.state.left || 0;
-    top += cursor.state.top || 0;
-    cursor = cursor.parentNode;
+function measureCanvasHeight(): number {
+  let height = PAD + HEADER_HEIGHT;
+  for (const group of GROUPS) {
+    const rows = Math.ceil(group.items.length / COLS);
+    height += GROUP_HEADER_HEIGHT + rows * CARD_HEIGHT + (rows - 1) * GAP + GROUP_GAP;
   }
-  return { left, top, width: node.state.width || 0, height: node.state.height || 0 };
+  return Math.max(MIN_CANVAS_HEIGHT, height + PAD);
 }
 
-/** 一行说明。`width` 必须给：不给的话对齐无从谈起。 */
-function line(text: string, left: number, top: number, width: number, style: any) {
-  return new ICELabel({ interactive: false, left, top, width, text, style });
+const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+canvas.width = CANVAS_WIDTH;
+canvas.height = measureCanvasHeight();
+
+const page: GamePageHandle = createPage({ continuousFrames: false });
+const theme = page.theme;
+
+const goto = (target: string) => {
+  window.location.href = target;
+};
+
+/* --------------------------------- 头部 --------------------------------- */
+
+const { games, machines, features } = stats();
+page.ice.addChild(
+  new ICELabel({
+    interactive: false,
+    left: PAD,
+    top: PAD,
+    width: CANVAS_WIDTH - PAD * 2 - 260,
+    text: 'ICE GAME',
+    style: { fontSize: 30, fontWeight: '700', fillStyle: theme.colors.text },
+  }),
+);
+page.ice.addChild(
+  new ICELabel({
+    interactive: false,
+    left: PAD,
+    top: PAD + 46,
+    width: CANVAS_WIDTH - PAD * 2,
+    text: '画布游戏厅 —— 机壳、按钮、方块、连扫雷的雷区，全是引擎画出来的，没有一个位图资源',
+    style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+  }),
+);
+/** 规模数字取自目录，不手写 —— 加了游戏忘了改这里是做不到的。 */
+page.ice.addChild(
+  new ICELabel({
+    interactive: false,
+    left: CANVAS_WIDTH - PAD - 260,
+    top: PAD + 10,
+    width: 260,
+    align: 'right',
+    text: `${games} 个小游戏 · ${machines} 台整机 · ${features} 项可玩`,
+    style: { fontSize: 13, fillStyle: theme.colors.textTertiary },
+  }),
+);
+
+/* --------------------------------- 分组与卡片 --------------------------------- */
+
+interface CardNodes {
+  card: any;
+  button: any;
 }
 
-/* --------------------------------- 外壳 --------------------------------- */
+const nodes: Record<string, CardNodes> = {};
 
-const shell = new ICEPanel({
-  id: 'game-home-shell',
-  left: SHELL.left,
-  top: SHELL.top,
-  width: SHELL.width,
-  height: SHELL.height,
-  radius: 14,
-  interactive: false,
-  style: { fillStyle: theme.colors.background, strokeStyle: theme.colors.border, lineWidth: 1 },
-});
-ice.addChild(shell);
-
-const { machines, items } = catalogSize();
-const headerTop = SHELL.top + 32;
-ice.addChild(
-  line('ICE GAME', SHELL.left + INNER_PAD, headerTop, 520, {
-    fontSize: 30,
-    fontWeight: '700',
-    fillStyle: theme.colors.text,
-  }),
-);
-ice.addChild(
-  line(
-    '画布游戏厅 —— 机壳、按钮、方块、连扫雷的雷区，全是引擎画出来的，没有一个位图资源',
-    SHELL.left + INNER_PAD,
-    headerTop + 44,
-    720,
-    { fontSize: 13, fillStyle: theme.colors.textSecondary },
-  ),
-);
-/** 规模数字取自目录，不手写 —— 加了机器忘了改这里是不可能的。 */
-ice.addChild(
-  line(`${machines} 台机器 · ${items} 项可玩`, SHELL.left + SHELL.width - INNER_PAD - 240, headerTop + 8, 240, {
-    fontSize: 13,
-    fillStyle: theme.colors.textTertiary,
-    textAlign: 'right',
-  }),
-);
-ice.addChild(
-  line(
-    '两个页面各自独占整屏与键盘：进去之后按浏览器「后退」回到这里',
-    SHELL.left + INNER_PAD,
-    SHELL.top + SHELL.height - 40,
-    720,
-    { fontSize: 12, fillStyle: theme.colors.textTertiary },
-  ),
-);
-
-/* --------------------------------- 卡片 --------------------------------- */
-
-/** 小游戏 / 程序：两列圆角芯片，行高固定，列宽由卡片内宽推出来。 */
-function renderItems(card: any, game: GameEntry) {
-  const colWidth = (CARD.width - PAD * 2) / ITEM_COLS;
-  game.items.forEach((name, index) => {
-    const col = index % ITEM_COLS;
-    const row = Math.floor(index / ITEM_COLS);
-    const left = PAD + col * colWidth;
-    const top = ITEMS_TOP + row * ITEM_ROW_H;
+/** 一行 chip：整机显示内含物，小游戏显示按键。 */
+function renderChips(card: any, game: GamePage, top: number): void {
+  const source =
+    game.features.length > 0
+      ? game.features.slice(0, 3).concat(game.features.length > 3 ? [`+${game.features.length - 3}`] : [])
+      : game.controls.slice(0, 3).map(([keys]) => keys);
+  let left = 22;
+  for (const text of source) {
+    const width = chipWidth(text);
+    if (left + width > CARD_WIDTH - 22) break; // 放不下就不再放（宁可少一个 chip，也不越界）
     card.addChild(
       new ICEPanel({
         interactive: false,
         left,
         top,
-        width: colWidth - 8,
-        height: ITEM_H,
+        width,
+        height: 24,
         radius: 6,
-        style: { fillStyle: theme.colors.surface, strokeStyle: theme.colors.borderSecondary, lineWidth: 1 },
+        style: { fillStyle: theme.colors.elevated, strokeStyle: theme.colors.borderSecondary },
       }),
       false,
     );
@@ -155,86 +134,37 @@ function renderItems(card: any, game: GameEntry) {
         interactive: false,
         left,
         top,
-        width: colWidth - 8,
-        height: ITEM_H,
-        text: name,
+        width,
+        height: 24,
         align: 'center',
         verticalAlign: 'middle',
+        text,
         style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
       }),
       false,
     );
-  });
+    left += width + 6;
+  }
 }
 
-/** 操作说明：左列按键（等宽字体）+ 右列作用。行容器走 BoxLayout，不手算 x。 */
-function renderControls(card: any, game: GameEntry) {
-  const KEY_W = 104;
-  const rows = new ICEWidget({
-    left: PAD,
-    top: CONTROLS_TOP,
-    width: CARD.width - PAD * 2,
-    height: CONTROL_ROW_H * game.controls.length,
-    fill: false,
-    stroke: false,
-    interactive: false,
-  });
-  rows.setLayout(new ICEBoxLayout({ axis: 'y', gap: 0 }));
-  game.controls.forEach(([keys, desc]) => {
-    const row = new ICEWidget({
-      width: CARD.width - PAD * 2,
-      height: CONTROL_ROW_H,
-      fill: false,
-      stroke: false,
-      interactive: false,
-    });
-    row.setLayout(new ICEBoxLayout({ axis: 'x', gap: 10 }));
-    row.addChild(
-      new ICELabel({
-        interactive: false,
-        width: KEY_W,
-        height: CONTROL_ROW_H,
-        text: keys,
-        style: { fontSize: 12.5, fontFamily: '"Courier New", monospace', fillStyle: theme.colors.text },
-      }),
-      false,
-    );
-    row.addChild(
-      new ICELabel({
-        interactive: false,
-        width: CARD.width - PAD * 2 - KEY_W - 10,
-        height: CONTROL_ROW_H,
-        text: desc,
-        style: { fontSize: 12.5, fillStyle: theme.colors.textSecondary },
-      }),
-      false,
-    );
-    rows.addChild(row, false);
-  });
-  card.addChild(rows, false);
-}
-
-const nodes: Record<string, { card: any; button: any }> = {};
-
-GAMES.forEach((game, index) => {
-  const left = SHELL.left + INNER_PAD + index * (CARD.width + CARD_GAP);
+function buildCard(game: GamePage, left: number, top: number): CardNodes {
   const card = new ICEPanel({
-    id: `game-card-${game.key}`,
+    id: `game-card-${game.slug}`,
     left,
-    top: CARD.top,
-    width: CARD.width,
-    height: CARD.height,
+    top,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     radius: 12,
-    style: { fillStyle: theme.colors.surface, strokeStyle: theme.colors.border, lineWidth: 1 },
+    style: { fillStyle: theme.colors.surface, strokeStyle: theme.colors.border },
   });
   // 整张卡片可点（不只按钮）—— 卡片是最自然的点击目标
   card.on('click', () => goto(game.page));
-  ice.addChild(card);
+  page.ice.addChild(card);
 
   /**
-   * 左侧 4px 竖条：卡片主色，一眼区分两台机器。
-   * 描边一定要给成和填充同色：`ICEPanel` 内部把 `stroke` 写死为 `true`（props 覆盖不了），
-   * 而画布的 `lineWidth: 0` 是**非法值会被忽略**、不是"不画"—— 留着默认宽度就会多出一圈描边。
+   * 左侧 4px 竖条：卡片主色，一眼区分不同游戏。
+   * 描边必须给成和填充同色：`ICEPanel` 内部把 `stroke` 写死为 `true`（props 覆盖不了），
+   * 而 `lineWidth: 0` 是**非法值会被忽略**，留着默认宽度就会多出一圈描边。
    */
   card.addChild(
     new ICEPanel({
@@ -242,7 +172,7 @@ GAMES.forEach((game, index) => {
       left: 0,
       top: 0,
       width: 4,
-      height: CARD.height,
+      height: CARD_HEIGHT,
       radius: 2,
       style: { fillStyle: game.accent, strokeStyle: game.accent },
     }),
@@ -252,104 +182,144 @@ GAMES.forEach((game, index) => {
   card.addChild(
     new ICELabel({
       interactive: false,
-      left: PAD,
-      top: 26,
-      width: CARD.width - PAD * 2,
+      left: 22,
+      top: 20,
+      width: CARD_WIDTH - 44 - 60,
       text: game.title,
-      style: { fontSize: 22, fontWeight: '700', fillStyle: theme.colors.text },
+      style: { fontSize: 19, fontWeight: '700', fillStyle: theme.colors.text },
     }),
     false,
   );
   card.addChild(
     new ICELabel({
       interactive: false,
-      left: PAD,
-      top: 60,
-      width: CARD.width - PAD * 2,
+      left: 22,
+      top: 50,
+      width: CARD_WIDTH - 44,
       text: game.tagline,
-      style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 12.5, fillStyle: theme.colors.textSecondary },
     }),
     false,
   );
-  card.addChild(
-    new ICEPanel({
-      interactive: false,
-      left: PAD,
-      top: 90,
-      width: CARD.width - PAD * 2,
-      height: 1,
-      // 同上：描边与填充同色，否则这条 1px 分隔线会顶着一圈默认描边
-      style: { fillStyle: theme.colors.borderSecondary, strokeStyle: theme.colors.borderSecondary },
-    }),
-    false,
-  );
-  card.addChild(
-    new ICELabel({
-      interactive: false,
-      left: PAD,
-      top: 102,
-      width: 200,
-      text: '内含',
-      style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
-    }),
-    false,
-  );
-  renderItems(card, game);
-  card.addChild(
-    new ICELabel({
-      interactive: false,
-      left: PAD,
-      top: 260,
-      width: 200,
-      text: '操作',
-      style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
-    }),
-    false,
-  );
-  renderControls(card, game);
+  renderChips(card, game, 84);
 
   const button = new ICEButton({
-    id: `game-enter-${game.key}`,
-    left: PAD,
-    top: CARD.height - PAD - 46,
-    width: 150,
-    height: 46,
+    id: `game-enter-${game.slug}`,
+    left: 22,
+    top: CARD_HEIGHT - 58,
+    width: 108,
+    height: 38,
     text: '进入',
     radius: 8,
     style: { fillStyle: game.accent, strokeStyle: game.accent },
   });
-  // 按钮的点击走事件（构造函数不吃 `onClick`；`ICESegmented` 那类才走构造参数）
+  // 按钮点击走事件（构造函数不吃 `onClick`；`ICESegmented` 那类才走构造参数）
   button.on('click', () => goto(game.page));
   card.addChild(button, false);
 
-  nodes[game.key] = { card, button };
-});
+  // 右上角徽标：整机 / 小游戏
+  const badgeText = game.kind === 'machine' ? '整机' : '小游戏';
+  const badgeWidth = 46;
+  card.addChild(
+    new ICEPanel({
+      interactive: false,
+      left: CARD_WIDTH - 22 - badgeWidth,
+      top: 22,
+      width: badgeWidth,
+      height: 20,
+      radius: 10,
+      style: { fillStyle: theme.colors.background, strokeStyle: theme.colors.borderSecondary },
+    }),
+    false,
+  );
+  card.addChild(
+    new ICELabel({
+      interactive: false,
+      left: CARD_WIDTH - 22 - badgeWidth,
+      top: 22,
+      width: badgeWidth,
+      height: 20,
+      align: 'center',
+      verticalAlign: 'middle',
+      text: badgeText,
+      style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
+    }),
+    false,
+  );
+
+  return { card, button };
+}
+
+let cursorY = PAD + HEADER_HEIGHT;
+
+for (const group of GROUPS) {
+  page.ice.addChild(
+    new ICELabel({
+      interactive: false,
+      left: PAD,
+      top: cursorY,
+      width: 110,
+      text: group.label,
+      style: { fontSize: 17, fontWeight: '700', fillStyle: theme.colors.text },
+    }),
+  );
+  page.ice.addChild(
+    new ICELabel({
+      interactive: false,
+      left: PAD + 110,
+      top: cursorY + 5,
+      width: CANVAS_WIDTH - PAD * 2 - 110,
+      text: `${group.blurb}　·　${group.items.length} 个`,
+      style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
+    }),
+  );
+
+  const gridTop = cursorY + GROUP_HEADER_HEIGHT;
+  group.items.forEach((game, index) => {
+    const col = index % COLS;
+    const row = Math.floor(index / COLS);
+    const left = PAD + col * (CARD_WIDTH + GAP);
+    const top = gridTop + row * (CARD_HEIGHT + GAP);
+    nodes[game.slug] = buildCard(game, left, top);
+  });
+
+  const rows = Math.ceil(group.items.length / COLS);
+  cursorY = gridTop + rows * CARD_HEIGHT + (rows - 1) * GAP + GROUP_GAP;
+}
+
+page.ice.addChild(
+  new ICELabel({
+    interactive: false,
+    left: PAD,
+    top: cursorY + 6,
+    width: CANVAS_WIDTH - PAD * 2,
+    text: '每个页面各自独占整屏与键盘：进去之后按浏览器「后退」回到这里',
+    style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
+  }),
+);
 
 /**
  * 组装完毕，显式画一帧。
  *
- * ⚠️ 这一行不能删，删了首页就是**一张空白画布**（而且控制台一个错都不报）：
- * 引擎的 `addChild(component, markDirty = true)` 里是 `this.dirty = markDirty` ——
- * 传 `false` 不是"不置脏"，而是**把 dirty 赋成 false**，会清掉前面 `ice.addChild(card)`
- * 置上的待渲染标记。引擎又是"空闲停帧"的（dirty 被消费、又没有动画，就停掉 rAF 循环），
- * 于是最后一次改动之后不会再有帧：画面停在最初的空帧，连点击命中缓存都不会建。
- *
- * 上游两个游戏页没踩这个坑，是因为它们**最后一步总是 `ice.addChild(...)`**（默认 markDirty=true）。
- * 本页最后几次挂载都是 `card.addChild(node, false)`（组件库容器里 `false` 是常规写法），
- * 所以收尾必须补这一句。
+ * ⚠️ 不能删：引擎的 `addChild(component, markDirty)` 里是 `this.dirty = markDirty` ——
+ * 传 `false` 不是"不置脏"，而是**把 dirty 赋成 false**，会清掉前面挂卡片时置上的待渲染标记。
+ * 引擎又是"空闲停帧"的（dirty 被消费、又没有动画，就停掉 rAF），
+ * 于是最后一次挂载之后不会再有帧：画面停在空白，控制台一个错都不报，点击命中也不会建。
  */
-ice.dirty = true;
+page.ice.dirty = true;
 
 /**
- * 调试 / e2e 句柄：对齐上游示例的 `window.__result` 套路。
- * 给的是**世界坐标**而不是卡片局部坐标 —— e2e 点卡片时必须点画布真实位置，
+ * 调试 / e2e 句柄。
+ * 给的是**世界坐标**而不是卡片局部坐标 —— e2e 点卡片必须点画布真实位置，
  * 背像素的测试会在换版面时静默失效。
  */
 (window as any).__gameHome = {
-  ice,
-  games: GAMES,
+  ice: page.ice,
+  groups: GROUPS,
+  pages: PAGES,
   nodes,
-  worldRect,
+  worldRect: page.worldRect,
+  find: page.find,
   goto,
-  size: CANVAS,
+  size: { width: CANVAS_WIDTH, height: canvas.height },
 };

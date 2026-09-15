@@ -2,128 +2,140 @@
 
 ## 项目定位
 
-ICE 家族的**游戏厅**：把 `ice-web-components` 的画布控件拼成能玩的机器。
-渲染与控件一律取自家族，本仓只写"怎么把它们装成一台游戏机"。
+ICE 家族的**游戏厅**：大量**单页小游戏**（无服务端、纯静态）+ 两台从上游移植的整机。
+渲染与控件一律取自家族，本仓只写"游戏怎么装起来、规则怎么算"。
 
-**三个入口 = 三个 HTML**（与 `ice-smart-water` 的单 HTML + 页签有意不同）：
+**一个页面 = 一个游戏 = 一个入口 = 一个 HTML**（不是单 HTML 里多个页签）：
+每个游戏独占整屏与键盘、彼此零共享状态、各有自己的开场流程。
+硬塞进一个页面只会让"切页要重建整个游戏"比"开个新页面"更贵。
+（例外：`src/home/` 是游戏厅首页 —— 它不是游戏，是所有游戏的入口。）
 
-| 入口 | 产物 | 来源 |
-|---|---|---|
-| 游戏厅首页 | `index.html` | 本仓自己写（`src/home/`） |
-| ICE Arcade 掌机 | `arcade.html` | **从上游逐字抽取**（`src/games/arcade/`） |
-| Windows XP 桌面 | `windows-xp.html` | **从上游逐字抽取**（`src/games/windows-xp/`） |
+## 目录结构（分区是物理隔离的，不是文档约定）
 
-为什么不用一个 HTML 装三个页签：三台机器各自独占整屏、独占键盘，各自有"开机自检"这类一次性
-流程，彼此没有共享状态。硬塞进一个页面里，"切页要重建整台机器"比"开个新页面"更贵。
+```
+src/
+├─ domain/            纯逻辑 + 目录（零运行时依赖，可单测）
+│  ├─ catalog.ts        目录 API：分组、查询、统计
+│  └─ catalog.generated.json  ← 生成物（npm run gen:catalog，勿手改）
+├─ kit/               小游戏底座（★ 自研游戏共用，别再各写一遍）
+│  ├─ page.ts           画布 + 引擎 + 主题 + dpr
+│  ├─ shell.ts          标题/数值卡/按钮/帮助/暂停与结束覆盖层
+│  ├─ loop.ts           帧循环（dt 上限、暂停即停帧）
+│  ├─ input.ts          键盘 → 语义动作
+│  ├─ storage.ts        localStorage 容错（零依赖）
+│  ├─ high-scores.ts    最高分榜（复用 ICEHighScoreModel）
+│  └─ audio.ts          WebAudio 合成音效
+├─ games/<slug>/      ★ 自研单页小游戏（开发区，一个游戏一个目录）
+│  ├─ meta.json         唯一配置：标题/说明/分组/尺寸/主色
+│  ├─ main.ts           装配（kit 六件怎么接）
+│  └─ model.ts          游戏规则（纯逻辑，可单测）
+├─ ported/<slug>/     ★ 上游移植的整机（arcade / windows-xp）
+│  ├─ meta.json         ← 首次由 sync-upstream 生成，之后**手改**（文案）
+│  ├─ index.html        ← 生成物，禁手改
+│  └─ main.ts           ← 生成物，禁手改
+├─ templates/page.html  小游戏共用页面骨架（HTML 只写一份）
+└─ home/               游戏厅首页（目录驱动）
+```
 
 ## 铁律
 
-### 1. `src/games/**` 是生成物，禁止手改
+### 1. `games` 与 `ported` 的分工不许混
 
-两个游戏页由 `scripts/sync-upstream.mjs` 从
-`../ice-web-components/examples/{arcade,windows-xp}.html` **逐字**抽取：
-
-- 要改玩法 / 版面 → **改上游页** → `npm run sync:upstream`；
-- 直接改 `src/games/**` 的后果不是"下次同步被覆盖"这么轻 —— 它是"本仓与上游悄悄分叉，
-  而抽取器的指纹打印变成了噪音"；
-- 抽取器带逐字自校验（抽出正文必须是上游文件子串），并打印行数 / 字节 / sha256。
-  同步后先看这三项，对上就是同一份代码。
-
-`main.ts` 里 `@ts-nocheck` 是**有意**的：上游正文是 JS，"保持逐字"比"通过 strict 检查"重要。
-本仓的类型门禁落在 `src/domain`（纯逻辑）与 `src/home`（自己写的画布首页）上。
-
-### 2. 家族三件套的依赖与 alias —— 加依赖时按固定顺序，别漏 alias
-
-`package.json` 的 dependencies 声明三个家族包（与 `ice-smart-water` 同模式）：
-
-```jsonc
-"@damoqiongqiu/ice-chart": "file:../ice-chart",      // 图表（做新游戏会用到）
-"ice-render": "file:../ice-render",                  // 引擎
-"ice-web-components": "file:../ice-web-components"   // 画布控件 + 游戏模型
-```
-
-它们在本机是**并列的兄弟仓库**，各自 `node_modules` 里还躺着一份自己装的引擎
-（实测 ice-web-components 带 2.10.0、ice-chart 带 2.10.1）。所以：
-
-**加一个新家族依赖的顺序固定为 ①→②→③，缺一个都不行：**
-
-1. `package.json` → `"file:../<repo>"`（npm 装成软链；带 scope 的包写完整包名）
-2. `webpack.config.js` → `family` alias（打包时只留一份引擎）
-3. `tsconfig.json` → `paths` 指向 `../<repo>/dist/types/index.d.ts`（类型层同口径）
-
-只配 ①② 会让 **tsc 报"类型不兼容"而 webpack 却构建成功**（两份 `.d.ts`，
-`ICELayoutManager` 带私有成员 → 互不兼容的名义类型），这种不一致最费时间。
-
-**门禁已经替你守着（三道，都在 `npm run verify` 里）：**
-
-| 断言 | 在哪 | 抓什么 |
+| 分区 | 能改吗 | 加东西的方式 |
 |---|---|---|
-| 配置自检 | `webpack.config.js` 加载期 | ① 加了但 ② 漏了 → 直接抛错 |
-| 单份引擎 | `SingleEnginePlugin`（每次构建都跑，零额外成本） | 某个包被打进 2 份以上 → 构建失败 |
-| 接线冒烟 | `npm run check:wiring` | 未被页面 import 的依赖（如当前的 `ice-chart`）也要真的能打包 |
+| `src/games/<slug>/` | **就是要改** | `npm run new:game -- <slug>` |
+| `src/ported/<slug>/` 的 `index.html` / `main.ts` | **禁止手改**（会被 `npm run sync:upstream` 覆盖） | 改上游页，然后 `npm run sync:upstream` |
+| `src/ported/<slug>/meta.json` | 可以改（文案不属于上游产物） | 直接编辑 |
 
-判据只有一份实现：`scripts/lib/family-guard.cjs`（插件与脚本共用）。
-**改造它之前先看那个文件顶部的实测记录** —— 这条判据在开发中静默失效过（构建全绿、
-画面空白），两个真实错法（守护名单从 alias 表推导、带 scope 的包只按包名匹配）都记在那里，
-`check-wiring.cjs` 里有对应的回归自测（改坏了会红）。
+分区是**物理隔离**的：混在一个目录里只靠文档约束，迟早有人改错地方。
+新增上游移植页面时在 `scripts/sync-upstream.mjs` 的 `PAGES` 里登记。
 
-⚠️ 判据类代码必须做**敏感度自检**：把它故意改坏（或喂合成路径），确认它真的会红。
-"门禁是绿的"本身不构成证据 —— 今天这条判据两次绿着漏判。
+### 2. 加游戏**不改构建配置、不改首页、不改 e2e**
+
+三处都是**目录驱动**的，加了游戏自动生效：
+
+| 环节 | 怎么自动跟上 |
+|---|---|
+| 构建入口 + HTML | `webpack.config.js` 扫 `src/games/*` 与 `src/ported/*`（`scripts/lib/scan-games.cjs`） |
+| 首页卡片 | 读 `src/domain/catalog.ts`（数据来自生成的 `catalog.generated.json`） |
+| e2e 冒烟 | `e2e/catalog.spec.ts` 遍历 `entryPages()`；小游戏还自动套"通用不变量" |
+
+所以**不要**去 webpack 里手写 entry —— 那是回退到"每加一个游戏改一次配置"。
+
+**`meta.json` 是"已注册"的标志**：没有它 = 半成品目录，不进构建、不进首页
+（`gen-catalog` 会提醒你哪些目录没登记）。字段与校验规则见 `scripts/lib/scan-games.cjs`
+（`slug` 必须等于目录名且全局唯一；`kind` 必须与分区一致；`tagline` ≤34 字）。
 
 ### 3. `ice.addChild(node, false)` 会**清掉** dirty —— 收尾必须补 `ice.dirty = true`
 
-引擎源码是 `this.dirty = markDirty`，所以传 `false` 不是"不置脏"，而是**把待渲染标记赋成 false**。
-引擎又是"空闲停帧"的（dirty 被消费、又没动画，就停 rAF），于是**最后一次挂载用了 `false` 就再也
-不会有帧**：画面停在空白，控制台一个错都不报，点击命中缓存也不会建。
+引擎源码是 `this.dirty = markDirty`，所以 `false` 不是"不置脏"，而是**把待渲染标记赋成 false**。
+引擎又是"空闲停帧"的（dirty 被消费、又没动画就停 rAF），于是**最后一次挂载用了 `false`
+就再也不会有帧**：画面停在空白，控制台一个错都不报，点击命中也不会建。
 
-- 组件库容器里 `container.addChild(node, false)` 是常规写法（`false` 的语义在那儿是"我自己统一置脏"）；
+- 组件库容器里 `container.addChild(node, false)` 是常规写法（那儿的语义是"我自己统一置脏"）；
 - 但**根上**的收尾必须是 `ice.addChild(x)`（默认 true）或显式 `ice.dirty = true`。
 
-上游两个游戏页没踩这个坑，是因为它们最后一步总是 `ice.addChild(...)`。`src/home/main.ts`
-结尾那句 `ice.dirty = true` 就是为此存在，**别删**。
+`src/home/main.ts` 与每个小游戏 `main.ts` 结尾那句 `ice.dirty = true` 就是为此存在，**别删**。
+（`kit/page` 打开了 `setContinuousFrames(true)`——游戏每帧都要推进；但收尾这一句仍要留。）
 
-### 4. 坐标：卡片内是局部坐标，世界坐标要沿 parentNode 累加
+### 4. 画布外的内容会被**静默裁掉**
 
-- 节点加进卡片之后就是**卡片的局部坐标**（卡片已在自己的绝对位置上），别再减一次父级偏移；
+引擎没有"溢出报错"。所以：
+
+- 外壳（`kit/shell`）构造时会算 `layout.contentBottom`，越界时 `console.warn`；
+- `e2e/catalog.spec.ts` 对**每个小游戏**断言 `contentBottom <= canvas.height`
+  —— 新游戏自动被覆盖，不用登记；
+- 排 stage 高度要**倒推**：画布高 −（底部按钮行 40 + 帮助行×24 + 留白）−（顶部标题带 + 数值卡）。
+
+### 5. 坐标：容器内是局部坐标；世界坐标沿 `parentNode` 累加
+
+- 节点加进舞台容器/卡片之后就是**该容器的局部坐标**，别再减一次父级偏移；
 - 要拿世界坐标（e2e 点控件必须用）就沿 `parentNode` 累加 `state.left/top`；
-- **终止条件是 `cursor.state`，不是 `cursor`**：`ICE` 实例本身没有 `state`，
-  `while (cursor) { … }` 会在根上读 `state.left` 直接崩。
+- **终止条件是 `cursor.state` 而不是 `cursor`**：`ICE` 实例本身没有 `state`，
+  `while (cursor)` 会在根上读 `state.left` 直接崩。`kit/page` 的 `worldRect()` 已封装好。
+
+### 6. 画布内**不要用彩色 emoji**
+
+引擎的文本渲染走 canvas `fillText`，彩色 emoji 会渲染成怪符号（实测一个方框加乱码）。
+中英文、数字、`←→` 这类符号都没问题（`kit/shell` 的音效按钮就因为踩过这个，从 `🔊` 改成了文字）。
+
+### 7. 游戏规则必须是**零运行时依赖的纯逻辑**
+
+`model.ts` 不 import 引擎、不碰 DOM。好处：规则能在 node 里单测（`npm test` 0.2 秒跑完），
+不需要浏览器、不需要引擎产物。`main.ts` 只负责装配与画面 —— 这条分界是单测跑得快的前提。
 
 ## 门禁
 
 ```bash
-npm run types:check   # tsc --noEmit（含 e2e、首页、tests/wiring 的跨包类型断言）
-npm test              # jest：只覆盖 src/domain 深逻辑，不需要引擎产物 / jsdom
+npm run types:check   # tsc --noEmit（含 kit、games、e2e、跨包类型接线）
+npm test              # jest：domain / kit / 各游戏的 model（不需要引擎产物、不需要 jsdom）
 npm run check:wiring  # 家族三件套接线：真打一次包，断言每个包只进来一份
-npm run build         # webpack 三入口
-npm run test:e2e      # 先自动 build，再真 Chrome 跑三个页面
-npm run verify        # types:check + test + check:wiring + build
+npm run check:catalog # 目录生成物是否最新（改了 meta.json 忘了生成会红）
+npm run build         # 扫目录构建（会自动先跑 gen:catalog）
+npm run check:games   # 目录 ↔ 生成物 ↔ 构建产物 三者一致（build 之后跑）
+npm run test:e2e      # 真 Chrome：像素 + 真鼠标真键盘 + 目录驱动逐页冒烟
+npm run verify        # 上面除 e2e 外全部
 ```
 
 e2e 的判据分三层（**缺一层就会出现"看起来通过其实没验证"**）：
 
-1. **像素**：`opaqueRatio` + `inkRatio`（与主色明显不同的占比）+ 颜色数 —— 只刷一层底色的
-   空画布会在后两项露馅；
-2. **目录**：掌机卡带数 / XP 程序数必须等于 `src/domain/game-catalog.ts` 里写的；
-3. **交互**：真鼠标切卡带、真键盘掰方向键、真双击图标开扫雷 —— 断言模型状态真的变了。
+1. **状态机**：直接断言 `model` 的相位/分数/命数（规则单测另有 `tests/games/`）；
+2. **交互**：真鼠标点画布控件、真键盘驱动输入 —— 断言状态真的变了；
+3. **像素**：`opaqueRatio` + `inkRatio` + 颜色数（只刷一层底色的空画布会在后两项露馅）。
+
+⚠️ **断言要与版面形态匹配**：`opaqueRatio` 的默认下限 0.5 只适用于"铺满画布"的页面；
+像首页那样"透明画布 + 卡片网格"的版面必须调低（`expectCanvasPainted` 的 `minOpaque`），
+否则会因正常留白而误报（踩过）。
 
 `channel: 'chrome'`：用系统 Chrome，绕开 Playwright 自带无头壳与本地缓存版本对不上的坑。
 `reuseExistingServer: false`：端口被别的服务占着时**直接响亮失败**，而不是静默复用别人的目录。
+**端口**：本仓 8098，可用 `ICE_GAME_PORT` 覆盖（本机 8096/8097 被无关常驻服务占着）。
 
 ## 家族级事实来源
 
-- 引擎仓 `../ice-render/AGENTS.md`：渲染 / 序列化 / 事件 / i18n 边界；
-  **本仓不得修改 `ice-render/` 源码**。
-- 组件库 `../ice-web-components/AGENTS.md`：布局铁律（容器排布走 `ICELayoutManager`）、
-  painter 契约、`UI*` → `ICE*` 迁移。
-- 应用侧套路（岛 / 覆盖层 / 画布 e2e 配方）见 skill `ice-family-app-dev` 与
-  `../ice-smart-water/AGENTS.md`。
-
-## 端口
-
-家族端口分配：ice-render 8090 / ice-entity-designer 8091 / ice-smart-water 8092 /
-ice-web-components 8093 / ice-render-dsl 8094 / react-demo 8095 / ice-chart 5177。
-**本仓 8097**（8096 在本机被一个无关的 python 服务长期占着）。
+- 引擎仓 `../ice-render/AGENTS.md`：渲染/序列化/事件/i18n 边界；**本仓不得修改 `ice-render/` 源码**。
+- 组件库 `../ice-web-components/AGENTS.md`：布局铁律、painter 契约、`UI*` → `ICE*` 迁移。
+- 应用侧套路（岛/覆盖层/画布 e2e 配方、接线门禁的四种错法）见 skill `ice-family-app-dev`。
 
 ## 发布
 

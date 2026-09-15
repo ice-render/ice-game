@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title><%= title %> — ICE Game</title>
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>"
+  />
+  <style>
+    html,
+    body {
+      height: 100%;
+    }
+    /*
+      `display: flex` 居中 + `overflow: hidden`：小游戏画布是固定设计尺寸，
+      窗口比它小就裁切（游戏版面不做响应式重排 —— 那会让碰撞判定与坐标一起漂）。
+
+      不要给 body 加 padding，也不要让包裹层用 inline-block：
+      前者会让 window.innerWidth 与画布宽度差一截（永远消不掉的横向滚动条），
+      后者会在行盒里留基线间隙（实测多出 6px 纵向滚动）。
+    */
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: <%= background %>;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+  <body>
+    <canvas id="canvas" width="<%= width %>" height="<%= height %>"></canvas>
+
+    <!--
+      入口脚本由 html-webpack-plugin 注入（defer，DOM 就绪后执行）。
+
+      这个文件是**所有自研小游戏共用的页面骨架**（`src/templates/page.html`）：
+      小游戏目录里不需要写 index.html，标题 / 画布尺寸 / 背景由该游戏 `meta.json` 注入。
+      要从单页骨架变成别的形态（多画布、非居中），才在自己的目录里放 index.html 并在
+      `scripts/lib/scan-games.cjs` 的约定里声明 —— 但先想清楚是否真有必要。
+    -->
+  </body>
+</html>

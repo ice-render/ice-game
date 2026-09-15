@@ -8,7 +8,7 @@
  *   npm run build && npm run screenshots
  *
  * 产出：`screenshots/*.png`（画布元素的截图，不含浏览器外框）。
- * 需要端口 8097 空闲（脚本自己起 http-server，跑完自己收）。
+ * 需要端口空闲（脚本自己起 http-server，跑完自己收；撞了用 `ICE_GAME_PORT` 覆盖）。
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -19,7 +19,7 @@ import { chromium } from '@playwright/test';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const OUT = path.join(ROOT, 'screenshots');
-const PORT = 8097;
+const PORT = Number(process.env.ICE_GAME_PORT || 8098);
 const BASE = `http://127.0.0.1:${PORT}`;
 const ICON_ORDER = ['computer', 'documents', 'notepad', 'paint', 'minesweeper', 'ie', 'display', 'arcade'];
 
@@ -77,6 +77,26 @@ async function main() {
   await page.waitForFunction(() => Boolean(window.__gameHome));
   await wait(600);
   await shoot(page, 'home');
+
+  // 打砖块：待发球（有覆盖层）→ 打掉几块砖（有分数、球在飞）
+  await page.goto(`${BASE}/breakout.html`, { waitUntil: 'load' });
+  await page.waitForFunction(() => Boolean(window.__breakout));
+  await wait(600);
+  await shoot(page, 'breakout-ready');
+  await page.evaluate(() => {
+    // 走真实 API 打一球拿分：截图里要有分数，而不是一张"0 分"的空场
+    const app = window.__breakout;
+    app.model.launch();
+    for (const index of [2, 11, 20]) {
+      const brick = app.model.getAliveBricks()[index];
+      if (!brick) continue;
+      app.model.setBallForTest(brick.x + brick.width / 2, brick.y + brick.height + 10, 0, -420);
+      app.model.step(24);
+    }
+    app.render();
+  });
+  await wait(500);
+  await shoot(page, 'breakout-playing');
 
   // 掌机：BIOS 自检 → 卡带
   await page.goto(`${BASE}/arcade.html`, { waitUntil: 'load' });

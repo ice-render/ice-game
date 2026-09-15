@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { findGame } from '../src/domain/game-catalog';
+import { findPage } from '../src/domain/catalog';
 import { RECT_HELPER, collectErrors, dblclickCanvas, expectCanvasPainted } from './support';
 
 /**
@@ -44,7 +44,7 @@ test.describe('Windows XP 桌面', () => {
     expect(['boot', 'login']).toContain(phase);
 
     // 目录里写的"八个程序"必须是这台机器真的有的
-    const expected = findGame('windows-xp')!.items.length;
+    const expected = findPage('windows-xp')!.features.length;
     const actual = await page.evaluate(() => (window as any).__result.APPS.length);
     expect(actual).toBe(expected);
 

@@ -34,10 +34,46 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const UPSTREAM_DIR = path.resolve(ROOT, '..', 'ice-web-components', 'examples');
 
-/** 一个卡带/一台机器 = 一个入口。`source` 是上游文件名，`name` 是本仓目录名（也是 chunk 名）。 */
+/**
+ * 一个卡带/一台机器 = 一个入口。`source` 是上游文件名，`name` 是本仓目录名（也是 chunk 名）。
+ *
+ * 全部落在 `src/ported/`（**上游移植分区**）—— 与 `src/games/`（自研小游戏）物理隔离：
+ * 这边的产物禁止手改，那边的目录就是要改的。混在一起只靠文档约束，迟早有人改错地方。
+ */
+const PARTITION = 'ported';
 const PAGES = [
-  { name: 'arcade', source: 'arcade.html' },
-  { name: 'windows-xp', source: 'windows-xp.html' },
+  {
+    name: 'arcade',
+    source: 'arcade.html',
+    meta: {
+      title: 'ICE Arcade 掌机',
+      tagline: '一台掌机，四张卡带 —— 开机先跑 BIOS 自检再选卡带',
+      accent: '#0d6efd',
+      features: ['俄罗斯方块', '贪吃蛇', '2048', 'CHIP-8'],
+      controls: [
+        ['方向键', '移动 / 旋转'],
+        ['空格', '硬降 / 暂停'],
+        ['P · R · L', '暂停 · 重开 · 排行榜'],
+        ['F2', '回到 BIOS 菜单'],
+      ],
+    },
+  },
+  {
+    name: 'windows-xp',
+    source: 'windows-xp.html',
+    meta: {
+      title: 'Windows XP 桌面',
+      tagline: '会自己开机的画布桌面：开机自检 → 欢迎屏 → 桌面',
+      accent: '#245edb',
+      features: ['扫雷', 'ICE Arcade', '记事本', '画图', '我的电脑', '我的文档', 'Internet Explorer', '显示属性'],
+      controls: [
+        ['双击图标', '打开程序'],
+        ['拖标题栏', '移动窗口'],
+        ['开始菜单', '注销 / 关机'],
+        ['右键雷区', '插旗 / 问号'],
+      ],
+    },
+  },
 ];
 
 /** 品牌色 `#0d6efd` 的播放键，够小、无外部请求。 */
@@ -150,14 +186,39 @@ function main() {
     }
     const { head, body } = extract(fs.readFileSync(from, 'utf8'), page.source);
 
-    const outDir = path.join(ROOT, 'src', 'games', page.name);
+    const outDir = path.join(ROOT, 'src', PARTITION, page.name);
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, 'index.html'), renderHtml(head, page.source), 'utf8');
     fs.writeFileSync(path.join(outDir, 'main.ts'), renderTs(body, page.source), 'utf8');
 
+    // 目录元数据：**只在缺失时创建**，之后永不覆盖 —— 否则每次同步都会把手写的
+    // tagline / controls 冲掉。文案改动直接编辑 `meta.json`（它不属于"上游生成物"）。
+    const metaPath = path.join(outDir, 'meta.json');
+    const metaCreated = !fs.existsSync(metaPath);
+    if (metaCreated) {
+      fs.writeFileSync(
+        metaPath,
+        JSON.stringify(
+          {
+            slug: page.name,
+            kind: 'machine', // machine = 上游移植的整机；game = 自研小游戏
+            title: page.meta.title,
+            tagline: page.meta.tagline,
+            accent: page.meta.accent,
+            features: page.meta.features,
+            controls: page.meta.controls,
+          },
+          null,
+          2,
+        ) + '\n',
+        'utf8',
+      );
+    }
+
     rows.push({
       page: page.name,
       source: page.source,
+      metaCreated,
       // 上游正文行数 / 字节 / 指纹：下次同步时对一眼就知道上游动没动
       lines: body.split('\n').length - 1,
       bytes: Buffer.byteLength(body, 'utf8'),
@@ -173,7 +234,10 @@ function main() {
         `${String(r.bytes).padStart(6)} 字节 / sha256:${r.digest}`,
     );
   }
-  console.log('\n生成物：src/games/<name>/{index.html,main.ts}（正文逐字，勿手改）');
+  console.log(`\n生成物：src/${PARTITION}/<name>/{index.html,main.ts}（正文逐字，勿手改）`);
+  if (rows.some((r) => r.metaCreated)) {
+    console.log(`meta.json 已为首次出现的页面创建（之后不会被覆盖，文案直接改它）`);
+  }
 }
 
 main();

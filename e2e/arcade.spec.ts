@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { findGame } from '../src/domain/game-catalog';
+import { findPage } from '../src/domain/catalog';
 import { RECT_HELPER, clickCanvas, collectErrors, expectCanvasPainted } from './support';
 
 /**
@@ -7,7 +7,7 @@ import { RECT_HELPER, clickCanvas, collectErrors, expectCanvasPainted } from './
  *
  * 断言分三层，缺一层就会出现"看起来通过其实没验证"：
  *  1) 像素：自检画面真的画出来了；
- *  2) 目录：卡带数量与 `src/domain/game-catalog.ts` 写的一致（目录是首页那张卡片的来源）；
+ *  2) 目录：卡带数量与 `src/domain/catalog.ts` 写的一致（目录是首页那张卡片的来源）；
  *  3) 交互：真鼠标切卡带、真键盘操作方块 —— 光有像素只能证明"画了一屏东西"。
  */
 test.describe('ICE Arcade 掌机', () => {
@@ -20,7 +20,7 @@ test.describe('ICE Arcade 掌机', () => {
     await expectCanvasPainted(page, 0.02);
 
     // 目录里写的"四张卡带"必须是这台机器真的有的（改一处忘另一处会立刻红）
-    const expected = findGame('arcade')!.items.length;
+    const expected = findPage('arcade')!.features.length;
     const actual = await page.evaluate(() => Object.keys((window as any).__arcade.cartridges).length);
     expect(actual).toBe(expected);
 

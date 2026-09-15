@@ -10,16 +10,21 @@
     "url": "git+https://github.com/ice-render/ice-game.git"
   },
   "scripts": {
-    "start": "webpack serve --mode development",
-    "build": "webpack --mode production",
-    "serve": "http-server dist -p 8097 -c-1",
+    "dev": "npm run gen:catalog && webpack serve --mode development",
+    "start": "npm run dev",
+    "build": "npm run gen:catalog && webpack --mode production",
+    "serve": "http-server dist -p ${ICE_GAME_PORT:-8098} -c-1",
+    "new:game": "node scripts/new-game.mjs",
+    "gen:catalog": "node scripts/gen-catalog.mjs",
+    "check:catalog": "node scripts/gen-catalog.mjs --check",
+    "check:games": "node scripts/check-games.mjs",
+    "check:wiring": "node scripts/check-wiring.cjs",
     "sync:upstream": "node scripts/sync-upstream.mjs",
     "types:check": "tsc --noEmit",
     "test": "jest --runInBand",
-    "check:wiring": "node scripts/check-wiring.cjs",
     "test:e2e": "npm run build && playwright test",
     "screenshots": "node scripts/shoot-screenshots.mjs",
-    "verify": "npm run types:check && npm test && npm run check:wiring && npm run build"
+    "verify": "npm run types:check && npm test && npm run check:wiring && npm run check:catalog && npm run build && npm run check:games"
   },
   "dependencies": {
     "@damoqiongqiu/ice-chart": "file:../ice-chart",
