@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>ICE Desktop · Windows XP</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+  <body>
+    <canvas id="canvas" width="1440" height="900"></canvas>
+
+    <!--
+      入口脚本由 html-webpack-plugin 注入。上游页在这里的两行
+        <script src="../node_modules/ice-render/dist/index.umd.js"></script>
+        <script src="../dist/index.umd.js"></script>
+      在本工程里不再需要：引擎与组件库改由 main.ts 从 node_modules 引，
+      webpack 的 resolve.alias 保证全工程只有一份 ice-render（见 webpack.config.js）。
+      本文件与 main.ts 都由 scripts/sync-upstream.mjs 生成，改玩法请改上游页。
+    -->
+  </body>
+</html>

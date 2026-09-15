@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>ICE Game — 画布游戏厅</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230d6efd'/><path d='M12 9l12 7-12 7z' fill='%23ffffff'/></svg>" />
+  <style>
+    html,
+    body {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 24%, #1b2130 0%, #080a0f 72%);
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+  <body>
+    <canvas id="canvas" width="1180" height="760"></canvas>
+
+    <!-- 入口脚本由 html-webpack-plugin 注入（defer，DOM 就绪后执行） -->
+  </body>
+</html>
