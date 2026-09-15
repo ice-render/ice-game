@@ -50,6 +50,20 @@ src/
 分区是**物理隔离**的：混在一个目录里只靠文档约束，迟早有人改错地方。
 新增上游移植页面时在 `scripts/sync-upstream.mjs` 的 `PAGES` 里登记。
 
+#### ★ 上游是**只读**的，永不删改
+
+`../ice-web-components/examples/` 是**别人的仓库**，本仓对它是**只读消费**：
+
+- 本仓任何脚本、任何命令都**不得**写入、重命名、删除上游的 `examples/*.html`
+  （`scripts/sync-upstream.mjs` 只读上游、只写自己 `src/ported/`）；
+- 上游的 9 个示例（`admin` / `algorithm-sandbox` / `arcade` / `custom-component` /
+  `dos-terminal` / `gallery` / `pixel-editor` / `windows-xp` / `workbench`）
+  **必须原样留在原处**：本仓只是"另外拷一份进来用"，不是"把示例搬走"。
+  上游自己的演示页与 e2e（`npm run test:e2e`，端口 8093）继续依赖它们；
+- 想改上游示例的玩法 → 改**上游**（那属于组件库仓的职责与门禁），再 `npm run sync:upstream` 同步过来；
+- 验证方式（只读、随时可重跑）：`examples/*.html` 与上游 `git HEAD` 逐字节一致 +
+  真 Chrome 打开 9 个页面均无报错且画布有内容。
+
 ### 2. 加游戏**不改构建配置、不改首页、不改 e2e**
 
 三处都是**目录驱动**的，加了游戏自动生效：
