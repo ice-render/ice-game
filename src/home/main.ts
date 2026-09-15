@@ -1,25 +1,33 @@
 /**
  * 游戏厅首页 —— 本工程唯一"自己写的非游戏页面"，把目录铺成**带封面的卡片网格**。
  *
+ * 版面自上而下：**吸顶导航**（独立画布 `#navbar`，见 `navbar.ts`）→ hero 标题带 →
+ * 分组网格 → **页脚**（家族仓库链接，见 `footer.ts`）。
+ *
  * 三件事：① 从 `src/domain/catalog.ts` 取分组；② 按列宽自动换行铺卡片；
  * ③ 点卡片/按钮进对应页面。**加一个新游戏不需要改这个文件**。
  *
- * ## 版面形态
+ * ## 画布高度按内容算
  *
- * 卡片以**封面图**为主体（`npm run covers` 自动抓的真实画面），下面是标题、一句话说明、
- * 按键提示与「进入」按钮。没有封面时画一个 accent 色调的占位块 —— 不至于开天窗，
- * 也一眼看得出"这个游戏还没抓封面"。
+ * 内容多高画布就多高，页面纵向滚动 —— 这是"大量游戏"下的必然选择，
+ * 固定画布要么裁卡片、要么逼每张卡缩成一条。
+ * ⚠️ 页脚高度必须从 `measureFooterHeight()`（纯函数）拿：**总高要在创建引擎之前定下来**，
+ * 而那时还没有引擎可用，`buildFooter()` 还跑不了。顺序错了页脚就会被画布底边裁掉。
  *
- * 圆角是**烘在 PNG 里**的：引擎的 `ICEImage` 不支持圆角裁剪（`clipType` 只有 `circle`），
- * 面板也不裁剪子节点，所以圆角只能在生成封面时用离屏画布的 `clip()` 裁好。
+ * ## 圆角是烘在 PNG 里的
  *
- * 画布高度**按内容算**（不是写死的 800）：内容多高画布就多高，页面纵向滚动 ——
- * 这是"大量游戏"下的必然选择，固定画布要么裁卡片、要么逼每张卡缩成一条。
+ * 引擎的 `ICEImage` 不支持圆角裁剪（`clipType` 只有 `circle`），面板也不裁剪子节点，
+ * 所以封面圆角只能在生成时用离屏画布的 `clip()` 裁好（`npm run covers`）。
  */
 import { ICEImage } from 'ice-render';
 import { ICEButton, ICELabel, ICEPanel } from 'ice-web-components';
 import { GROUPS, PAGES, coverUrl, pagesMissingCover, stats, type GamePage } from '../domain/catalog';
 import { createPage, type GamePageHandle } from '../kit';
+import { buildFooter, measureFooterHeight } from './footer';
+import { mountNavbar, NAVBAR, type NavbarHandle } from './navbar';
+
+/** 导航栏高度（引用 `navbar.ts` 的常量，避免两处各写一个数）。 */
+const NAVBAR_HEIGHT = NAVBAR.height;
 
 /* --------------------------------- 版面常量 --------------------------------- */
 
@@ -32,6 +40,14 @@ const GROUP_HEADER_HEIGHT = 58;
 const GROUP_GAP = 26;
 /** 最小画布高度：内容少时不至于挤成一条，也不至于留下大片空白。 */
 const MIN_CANVAS_HEIGHT = 660;
+
+/**
+ * 最后一个分组的底部 → 页脚分隔线的间距。
+ *
+ * 必须是一个**共享常量**：`measureCanvasHeight()` 用它预留、`buildFooter` 的 `top` 也用它，
+ * 两处各写一个数就会出现"页脚比预留低了几像素 → 被画布底边裁掉"这类只在截图里能看出的问题。
+ */
+const FOOTER_TOP_GAP = 30;
 
 const CARD_WIDTH = Math.floor((CANVAS_WIDTH - PAD * 2 - GAP * (COLS - 1)) / COLS);
 /** 封面按 16:9 显示（生成时也是 16:9，所以绘制不会拉伸变形）。 */
@@ -59,9 +75,9 @@ function chipWidth(text: string, fontSize = 11): number {
 }
 
 /**
- * 画布高度 = 头部 + 各分组 + 底部留白。
+ * 画布高度 = hero + 各分组 + 页脚 + 底部留白。
  * 先算高度、写进 canvas 属性，**再**建引擎 —— 引擎初始化时读的就是这个尺寸
- * （顺序反了会拿到旧的初始高度，下面的卡片全被裁掉）。
+ * （顺序反了会拿到旧的初始高度，下面的卡片与页脚全被裁掉）。
  */
 function measureCanvasHeight(): number {
   let height = PAD + HEADER_HEIGHT;
@@ -69,6 +85,8 @@ function measureCanvasHeight(): number {
     const rows = Math.ceil(group.items.length / COLS);
     height += GROUP_HEADER_HEIGHT + rows * CARD_HEIGHT + (rows - 1) * GAP + GROUP_GAP;
   }
+  // 页脚（含它的上分隔线）—— 纯函数量高，与 buildFooter 共用同一份布局
+  height += FOOTER_TOP_GAP + measureFooterHeight();
   return Math.max(MIN_CANVAS_HEIGHT, height + PAD);
 }
 
@@ -83,11 +101,21 @@ const goto = (target: string) => {
   window.location.href = target;
 };
 
-/* --------------------------------- 头部 --------------------------------- */
+/**
+ * 打开外部链接（新标签页）。
+ *
+ * 抽成一处而不是各链接自己 `window.open`：`noopener,noreferrer` 这类安全参数只写一遍，
+ * 将来要改成"先在站内确认页中转"也只动这里。
+ */
+const openLinkOutside = (url: string) => {
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+/* --------------------------------- hero --------------------------------- */
 
 const { games, machines, features } = stats();
 
-/** 头部左侧的品牌竖条：让"游戏厅"比一行标题更有存在感。 */
+/** hero 左侧的品牌竖条：让页面有个明确的视觉起点（品牌名在吸顶导航里，这里不重复）。 */
 page.ice.addChild(
   new ICEPanel({
     interactive: false,
@@ -105,7 +133,7 @@ page.ice.addChild(
     left: PAD + 18,
     top: PAD,
     width: CANVAS_WIDTH - PAD * 2 - 300,
-    text: 'ICE GAME',
+    text: '画布游戏厅',
     style: { fontSize: 32, fontWeight: '700', fillStyle: theme.colors.text },
   }),
 );
@@ -115,7 +143,7 @@ page.ice.addChild(
     left: PAD + 18,
     top: PAD + 48,
     width: CANVAS_WIDTH - PAD * 2 - 300,
-    text: '画布游戏厅 —— 连卡片封面都是自动抓的真实画面，没有一张手工准备的图',
+    text: '用 ICE 家族的引擎与控件做的单页小游戏 —— 连卡片封面都是自动抓的真实画面',
     style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
   }),
 );
@@ -377,6 +405,12 @@ function buildCard(game: GamePage, left: number, top: number): CardNodes {
 
 let cursorY = PAD + HEADER_HEIGHT;
 
+/**
+ * 各分组的纵向位置（页面画布坐标）—— 吸顶导航的锚点链接要滚到这里。
+ * 在铺卡片的过程中顺手记下，不必等布局结束再回头找。
+ */
+const sectionAnchors: { key: string; label: string; canvasY: number }[] = [];
+
 for (const group of GROUPS) {
   page.ice.addChild(
     new ICELabel({
@@ -408,6 +442,9 @@ for (const group of GROUPS) {
     nodes[game.slug] = buildCard(game, left, top);
   });
 
+  // 记下分组的纵向位置（吸顶导航的锚点用它滚动）
+  sectionAnchors.push({ key: group.kind, label: group.label, canvasY: cursorY });
+
   const rows = Math.ceil(group.items.length / COLS);
   cursorY = gridTop + rows * CARD_HEIGHT + (rows - 1) * GAP + GROUP_GAP;
 }
@@ -428,6 +465,48 @@ page.ice.addChild(
   }),
 );
 
+/* --------------------------------- 页脚 --------------------------------- */
+
+const footer = buildFooter({
+  page,
+  left: PAD,
+  top: cursorY + FOOTER_TOP_GAP,
+  width: CANVAS_WIDTH - PAD * 2,
+  openLink: openLinkOutside,
+});
+
+/**
+ * 自检：页脚必须落在画布内。
+ *
+ * 预留值是 `FOOTER_TOP_GAP + measureFooterHeight()`（与上面 `measureCanvasHeight()` 同一口径），
+ * 而 `buildFooter` 用的是同一份布局函数，所以正常情况下必然够用。
+ * 留着这道断言是为了"将来有人改了页脚布局、却忘了同步度量"时**立刻报错** ——
+ * 否则症状是"页脚被画布底边静默裁掉"，只有翻截图才发现。
+ */
+{
+  const footerBottom = cursorY + FOOTER_TOP_GAP + footer.height;
+  if (footerBottom > canvas.height) {
+    throw new Error(
+      `首页页脚越出画布：页脚底部 ${footerBottom}px > 画布高 ${canvas.height}px。` +
+        `检查 footer.ts 的 measureFooterHeight() 与 buildFooter() 是否共用同一份布局。`,
+    );
+  }
+}
+
+/* --------------------------------- 吸顶导航 --------------------------------- */
+
+/**
+ * 导航栏是**独立画布**（`#navbar`，CSS `position: fixed`）—— 详见 `navbar.ts` 顶部的说明。
+ *
+ * 它需要"页面画布坐标 → 文档坐标"的换算来定位锚点，所以把 `toDocumentY` 交给它，
+ * 导航栏自己不去猜页面版面（两者职责分开，改版面不用动导航）。
+ */
+const navbar: NavbarHandle = mountNavbar({
+  sections: sectionAnchors,
+  toDocumentY: (canvasY) => canvas.getBoundingClientRect().top + window.scrollY + canvasY,
+  openLink: openLinkOutside,
+});
+
 /**
  * 组装完毕，显式画一帧。
  *
@@ -435,8 +514,11 @@ page.ice.addChild(
  * 传 `false` 不是"不置脏"，而是**把 dirty 赋成 false**，会清掉前面挂卡片时置上的待渲染标记。
  * 引擎又是"空闲停帧"的（dirty 被消费、又没有动画，就停掉 rAF），
  * 于是最后一次挂载之后不会再有帧：画面停在空白，控制台一个错都不报，点击命中也不会建。
+ *
+ * **两块画布各置一次**：导航栏是另一个 ICE 实例，它的置脏不会影响页面画布。
  */
 page.ice.dirty = true;
+navbar.page.ice.dirty = true;
 
 /**
  * 调试 / e2e 句柄。
@@ -454,4 +536,19 @@ page.ice.dirty = true;
   size: { width: CANVAS_WIDTH, height: canvas.height },
   cardHeight: CARD_HEIGHT,
   missingCovers: missing,
+  /** 吸顶导航（独立画布）：e2e 拿它断言锚点、外链与高亮。 */
+  navbar: {
+    handle: navbar,
+    size: { width: navbar.width, height: navbar.height },
+    links: navbar.links,
+    sections: navbar.sections,
+    activeKey: () => navbar.activeKey,
+    scrollToSection: (key: string) => navbar.scrollToSection(key),
+    worldRect: (node: any) => navbar.page.worldRect(node),
+    find: (id: string) => navbar.page.find(id),
+    /** 把导航项滚到视野里（点它之前要保证它在视口内）。 */
+    canvasTop: () => document.getElementById('navbar')!.getBoundingClientRect().top,
+  },
+  /** 页脚：链接清单供 e2e 断言"都在、地址都对"。 */
+  footer: { links: footer.links, height: footer.height },
 };

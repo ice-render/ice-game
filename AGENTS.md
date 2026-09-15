@@ -34,9 +34,12 @@ src/
 │  ├─ index.html        ← 生成物，禁手改
 │  └─ main.ts           ← 生成物，禁手改
 ├─ templates/page.html  小游戏共用页面骨架（HTML 只写一份）
-└─ home/               游戏厅首页（目录驱动）
-   ├─ main.ts            封面卡片网格（网格换行 + 分组）
-   ├─ index.html         首页骨架（唯一允许纵向滚动的页面）
+└─ home/               游戏厅首页
+   ├─ main.ts            hero + 卡片网格 + 页脚（画布高度按内容算）
+   ├─ navbar.ts          吸顶导航（独立画布 #navbar，position: fixed）
+   ├─ footer.ts          页脚（家族仓库链接；布局是纯函数，量高与渲染共用）
+   ├─ chrome.ts          导航/页脚共用的品牌徽标、链接、分隔线
+   ├─ index.html         两块画布 + CSS（导航固定、主体滚动）
    └─ covers/<slug>.png  ← 生成物（npm run covers 自动抓，勿手改）
 ```
 
@@ -125,7 +128,32 @@ src/
 
 凡是"注册了回调但看起来没触发"的情况，先确认载荷形状；`ICEEventTarget.trigger` 的签名是唯一依据。
 
-### 8. 游戏规则必须是**零运行时依赖的纯逻辑**
+### 8. 首页有两块画布：导航是「岛」，且 e2e 必须按 **id** 定位画布
+
+首页 = `#navbar`（吸顶导航，`position: fixed`，独立 `ICE` 实例）+ `#canvas`（主体，随窗口滚动）。
+
+- 导航必须是独立画布：画在主体里会跟着内容滚走（要它不动就得每帧按 `scrollY` 重画）。
+  库里 `ICEAffix` / `ICEAnchor` 服务的是画布内滚动容器（`ICEScrollPane`），**窗口滚动用不上**。
+- **两块画布各置一次脏**：导航是另一个 `ICE` 实例，给主体置脏不影响它
+  （`page.ice.dirty = true; navbar.page.ice.dirty = true;`）。
+- ⚠️ **e2e / 截图脚本一律按 id 选画布**（`#canvas` / `#navbar`），
+  不要用 `page.locator('canvas')` 或 `querySelectorAll('canvas')[i]`：
+  前者在有多块画布时命中多个（strict mode 报错，或更糟——默默截到 60px 的导航条），
+  后者会在将来往 DOM 里插画布时**静默错位**。`e2e/support.ts` 已改用 id（`MAIN_CANVAS` / `NAVBAR_CANVAS`）。
+- 看"用户实际看到什么"用**视口截图**，不要用 `fullPage: true` ——
+  整页截图对 `position: fixed` 元素有渲染偏差（把导航画在内容之上，看着像"盖住了 hero"）。
+
+### 9. 外链地址来自 `src/domain/family-repos.ts`，且**必须核实过**
+
+页脚/导航里的 GitHub 地址集中在该文件（零依赖、可单测）。规矩：
+
+- 地址必须**逐个核实可访问**（开发时用 HTTP 请求确认返回 200），
+  不要按命名习惯推断 —— 家族里有 `ice-render-dsl` / `ice-chart-dsl` / `ice-entity-designer-dsl`
+  三个 DSL 包，光看名字很容易写错。
+- **本仓没开源就如实标"未开源"**，不要为了页脚好看编一个地址 —— 挂 404 比不挂更糟。
+  `SELF_REPO.published` 控制这件事；建好远端后填 `url` + 置 `published: true` 即可。
+
+### 10. 游戏规则必须是**零运行时依赖的纯逻辑**
 
 `model.ts` 不 import 引擎、不碰 DOM。好处：规则能在 node 里单测（`npm test` 0.2 秒跑完），
 不需要浏览器、不需要引擎产物。`main.ts` 只负责装配与画面 —— 这条分界是单测跑得快的前提。

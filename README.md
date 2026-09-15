@@ -4,9 +4,19 @@
 [ice-web-components](https://github.com/ice-render/ice-web-components) 的画布控件搭的**游戏厅**：
 小游戏、掌机、XP 桌面上的扫雷 —— 全部由引擎画在同一张 `<canvas>` 上，**画面里没有一个位图资源**。
 
-![ICE Game 画布游戏厅](screenshots/home.png)
+![ICE Game 画布游戏厅](screenshots/home-hero.png)
 
 > ⚠️ **Just for fun.** 纯娱乐与探索项目，不是产品，不要拿它当生产级 UI。
+
+首页有**吸顶导航**（品牌 + 分区锚点 + 文档/GitHub 入口）与**页脚**（ICE 家族各仓的 GitHub 链接）：
+
+| 吸顶导航 | 页脚 |
+|---|---|
+| ![导航](screenshots/home-navbar.png) | ![页脚](screenshots/home-footer.png) |
+
+> 导航栏是**第二块画布**（`#navbar`，`position: fixed`）——首页滚的是浏览器窗口，
+> 画在页面画布里会跟着内容滚走。页脚里的链接地址来自 `src/domain/family-repos.ts`，
+> 每条都核实过可访问；本仓 `ice-game` 尚未开源，页脚里如实标成纯文本**而不是编一个链接**。
 
 ## 1. 这里有什么
 
@@ -92,7 +102,8 @@ flowchart LR
 src/
 ├─ domain/            纯逻辑 + 目录（零运行时依赖）
 │  ├─ catalog.ts        目录 API：分组 / 查询 / 统计
-│  └─ catalog.generated.json  ← 生成物（gen:catalog，勿手改）
+│  ├─ catalog.generated.json  ← 生成物（gen:catalog，勿手改）
+│  └─ family-repos.ts   ICE 家族各仓的 GitHub 地址（页脚/导航的链接来源）
 ├─ kit/               ★ 小游戏底座：新游戏别再各写一遍
 │  ├─ page.ts           画布 + 引擎 + 主题 + dpr
 │  ├─ shell.ts          标题 / 数值卡 / 按钮 / 操作说明 / 暂停与结束覆盖层
@@ -104,11 +115,25 @@ src/
 ├─ games/<slug>/      ★ 自研小游戏：meta.json + main.ts + model.ts
 ├─ ported/<slug>/     ★ 上游移植的整机（index.html / main.ts 是生成物，禁手改）
 ├─ templates/page.html  小游戏共用页面骨架（HTML 只写一份）
-└─ home/              游戏厅首页（网格自动换行 + 分组）
+└─ home/              游戏厅首页
+   ├─ main.ts           hero + 卡片网格 + 页脚（画布高度按内容算）
+   ├─ navbar.ts         吸顶导航（独立画布 #navbar，position: fixed）
+   ├─ footer.ts         页脚（家族仓库链接；布局是纯函数，量高与渲染共用）
+   ├─ chrome.ts         导航/页脚共用的品牌徽标、链接、分隔线
+   ├─ index.html        两块画布 + CSS（导航固定、主体滚动）
+   └─ covers/<slug>.png ← 生成物（npm run covers 自动抓，勿手改）
 ```
 
 两个分区是**物理隔离**的：`games/` 是开发区（就是要改），`ported/` 是上游产物（禁止手改，
 跟随上游只需 `npm run sync:upstream`）。详见 [AGENTS.md](./AGENTS.md)。
+
+> **为什么首页有两块画布**：页面主体（`#canvas`）随窗口滚动，而导航要永远可见。
+> 画在主体画布里的话导航会跟着滚走（要它不动就得每帧按 `scrollY` 重画）。
+> 于是用家族里现成的「岛」套路：`#navbar` 是一块独立画布 + 独立 `ICE` 实例，
+> CSS `position: fixed` 吸在视口顶部 —— 真正的吸顶、零重绘成本，
+> 页面画布那边一行不用改（只在 CSS 里留出顶部位置）。
+> 库里的 `ICEAffix` / `ICEAnchor` **用不上**：它们服务的是画布内滚动容器（`ICEScrollPane`），
+> 而这里的滚动发生在窗口上。
 
 ## 5. 门禁
 

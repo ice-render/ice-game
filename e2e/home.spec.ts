@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { PAGES, entryPages, findPage, stats } from '../src/domain/catalog';
-import { canvasPoint, clickCanvas, collectErrors, expectCanvasPainted } from './support';
+import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO } from '../src/domain/family-repos';
+import { NAVBAR_CANVAS, canvasPoint, clickCanvas, collectErrors, expectCanvasPainted } from './support';
 
 /**
  * 游戏厅首页：目录（`src/domain`）→ 画布网格（`src/home`）→ 真实跳转的闭环。
@@ -173,5 +174,125 @@ test.describe('游戏厅首页', () => {
     expect(badges).toHaveLength(PAGES.length);
     // breakout 属于「小游戏」组：分组归位由 kind 决定，写错在构建期就会报错
     expect(findPage('breakout')?.kind).toBe('game');
+  });
+
+  test('吸顶导航：固定在视口顶部、锚点能跳转、内容不压在导航下面', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(600);
+
+    /*
+     * ① 页面**顶部**时，主体不能被导航压住（CSS 给 body 留了 padding-top）。
+     *
+     * 这条必须在 scrollY = 0 时验：一旦滚动，主体画布本来就会跑到视口上方
+     * （第一版把它放在滚动之后，于是拿到 mainTop = -320，误报成"被压住"）。
+     */
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(200);
+    const layout = await page.evaluate(() => {
+      const nav = document.getElementById('navbar')!.getBoundingClientRect();
+      const main = document.getElementById('canvas')!.getBoundingClientRect();
+      return { navBottom: nav.bottom, mainTop: main.top };
+    });
+    expect(layout.mainTop, '页面主体被导航压住了').toBeGreaterThanOrEqual(layout.navBottom - 1);
+
+    // ② 导航是独立画布且固定在视口顶部（滚动后位置不变）
+    const before = layout.navBottom - 60; // navbar 高 60，顶部固定时其 top ≈ 0
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.waitForTimeout(300);
+    const navTop = await page.evaluate(() => document.getElementById('navbar')!.getBoundingClientRect().top);
+    expect(navTop, '导航应当固定，不随窗口滚动').toBeCloseTo(before, 0);
+    expect(Math.abs(navTop)).toBeLessThanOrEqual(1);
+
+    // ③ 导航画布真的画了东西（不是一块透明画布）
+    await expectCanvasPainted(page, 0.02, { minOpaque: 0.5, canvasId: NAVBAR_CANVAS });
+
+    // ④ 点「整机展厅」锚点 → 真的滚到那一组的位置
+    //
+    // 两个"别这么写"：
+    //  · 锚点用 `behavior: 'smooth'`，**不能拿固定 sleep 等它**（上一版等 900ms 偶发拿到 0）；
+    //  · 也不能只等"scrollY 变大"就断言高亮 —— 平滑滚动**途中**还在上一组，
+    //    高亮自然还是上一组。要等它**落到目标位置**再断言。
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+
+    const target = await page.evaluate(() => {
+      const home = (window as any).__gameHome;
+      const section = home.navbar.sections.find((s: any) => s.key === 'machine');
+      const node = home.navbar.find(`navbar-section-${section.key}`);
+      const rect = home.navbar.worldRect(node);
+      // 锚点滚动的期望落点：画布在文档里的偏移 + 分区在画布里的位置 − 导航高度 − 余量
+      const canvasTop = document.getElementById('canvas')!.getBoundingClientRect().top + window.scrollY;
+      const expected = canvasTop + section.canvasY - home.navbar.size.height - 16;
+      return { key: section.key, rect, expected };
+    });
+
+    await clickCanvas(
+      page,
+      target.rect.left + target.rect.width / 2,
+      target.rect.top + target.rect.height / 2,
+      NAVBAR_CANVAS,
+    );
+
+    // 等滚动落到目标位置（±8px 容差），而不是等一个固定时长
+    await page.waitForFunction(
+      (expected) => Math.abs(window.scrollY - expected) < 8,
+      target.expected,
+      { timeout: 5000 },
+    );
+    // 落位之后，高亮应当就在被点的分区上
+    expect(await page.evaluate(() => (window as any).__gameHome.navbar.activeKey())).toBe(target.key);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('吸顶导航：滚到顶时第一个分区高亮（不是"一个都不亮"）', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+
+    const first = await page.evaluate(() => (window as any).__gameHome.navbar.sections[0]);
+    // 分组标题在 hero 下方 —— 刚打开时"还没经过任何标题"，按语义应回退到第一组
+    expect(await page.evaluate(() => (window as any).__gameHome.navbar.activeKey())).toBe(first.key);
+  });
+
+  test('导航外链与页脚外链：地址与家族仓库一致，且真鼠标点击能打开', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean((window as any).__gameHome));
+    await page.waitForTimeout(600);
+
+    // ① 链接清单：页脚必须覆盖家族全部仓库 + 主页（与 src/domain/family-repos.ts 同源）
+    const footerLinks = await page.evaluate(() => (window as any).__gameHome.footer.links);
+    expect(footerLinks.length).toBe(FAMILY_REPOS.length + 1); // + 家族主页
+    for (const repo of FAMILY_REPOS) {
+      expect(footerLinks.map((l: any) => l.url)).toContain(repo.url);
+    }
+    expect(footerLinks.map((l: any) => l.url)).toContain(FAMILY_HOME);
+    // 未开源的仓不出现链接（页脚渲染成纯文本）
+    expect(footerLinks.map((l: any) => l.text)).not.toContain(`${SELF_REPO.name}`);
+
+    // ② 真鼠标点页脚里的 ice-render 链接 → 新标签页打开正确地址
+    const target = await page.evaluate(() => {
+      const home = (window as any).__gameHome;
+      const node = home.find('footer-ice-render');
+      return node ? home.worldRect(node) : null;
+    });
+    expect(target, '页脚里找不到 ice-render 链接').not.toBeNull();
+    // 先滚到底让页脚进入视口（fixed 的导航不受影响）
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(500);
+
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      clickCanvas(page, target!.left + 10, target!.top + target!.height / 2),
+    ]);
+    expect(popup.url()).toContain('github.com/ice-render/ice-render');
+    await popup.close();
+
+    expect(errors).toEqual([]);
   });
 });

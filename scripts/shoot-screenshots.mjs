@@ -43,11 +43,32 @@ async function clickCanvas(page, x, y) {
   await page.mouse.click(box.x + (x * box.width) / size.width, box.y + (y * box.height) / size.height);
 }
 
-async function shoot(page, name) {
+/**
+ * 截一张画布。
+ *
+ * ⚠️ 必须用 **id 选择器**而不是 `page.locator('canvas')`：首页现在有**两块画布**
+ * （吸顶导航 `#navbar` + 页面主体 `#canvas`），笼统选 `canvas` 会命中多个元素
+ * （strict mode 直接报错，或者更糟：默默截到导航那条 60px 的窄条）。
+ */
+async function shoot(page, name, canvasId = 'canvas') {
   const file = path.join(OUT, `${name}.png`);
-  await page.locator('canvas').screenshot({ path: file });
+  await page.locator(`#${canvasId}`).screenshot({ path: file });
   const { size } = fs.statSync(file);
   console.log(`  ${name.padEnd(22)} ${(size / 1024).toFixed(0)} KB`);
+}
+
+/**
+ * 截**视口**（用户实际看到的画面，含固定定位的吸顶导航）。
+ *
+ * 为什么不用 `fullPage: true`：整页截图在 Chrome 里对 `position: fixed` 元素有渲染偏差 ——
+ * 它把 fixed 元素画在顶部一次，于是会**压在正文之上**（实测看起来像"导航盖住了 hero"，
+ * 而实际不会）。要看"打开页面时看到什么"，唯一可靠的是视口截图。
+ */
+async function shootViewport(page, name) {
+  const file = path.join(OUT, `${name}.png`);
+  await page.screenshot({ path: file });
+  const { size } = fs.statSync(file);
+  console.log(`  ${name.padEnd(22)} ${(size / 1024).toFixed(0)} KB  (视口)`);
 }
 
 async function main() {
@@ -72,11 +93,23 @@ async function main() {
   await page.addInitScript({ content: RECT_HELPER });
   console.log('抓取截图：');
 
-  // 游戏厅首页
+  // 游戏厅首页：
+  //  · home-hero    —— 视口截图（打开页面时看到的：吸顶导航 + hero + 第一行卡片）
+  //  · home         —— 主体画布本身（完整内容：卡片网格 + 页脚，不含固定的导航）
+  //  · home-navbar  —— 导航条单独一张（1180×60，用于文档里说明它的构成）
+  //  · home-footer  —— 滚到底的视口截图（页脚与家族链接）
   await page.goto(`${BASE}/index.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => Boolean(window.__gameHome));
-  await wait(600);
+  await wait(700);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await wait(300);
+  await shootViewport(page, 'home-hero');
   await shoot(page, 'home');
+  await shoot(page, 'home-navbar', 'navbar');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await wait(600);
+  await shootViewport(page, 'home-footer');
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   // 打砖块：待发球（有覆盖层）→ 打掉几块砖（有分数、球在飞）
   await page.goto(`${BASE}/breakout.html`, { waitUntil: 'load' });

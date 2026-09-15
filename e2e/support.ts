@@ -3,10 +3,22 @@ import { expect, type Page } from '@playwright/test';
 /**
  * e2e 公共件：错误收集、像素统计、画布坐标换算。
  *
- * 三个页面都是**整屏画布应用**，DOM 里只有一个 `<canvas>`，所以断言只能落在
- * 「画布上真的有东西」与「真按键 / 真鼠标之后状态真的变了」这两件事上。
- * 这也是本仓 e2e 的判据口径：只有像素、或只有状态、或只有 URL，都可能"看起来通过其实没验证"。
+ * 这些页面是**整屏画布应用**，所以断言只能落在「画布上真的有东西」与
+ * 「真按键 / 真鼠标之后状态真的变了」这两件事上。这也是本仓 e2e 的判据口径：
+ * 只有像素、或只有状态、或只有 URL，都可能"看起来通过其实没验证"。
+ *
+ * ## 画布按 **id** 定位，不按序号
+ *
+ * 首页现在有**两块画布**（吸顶导航 `#navbar` + 页面主体 `#canvas`），其它页面各一块。
+ * 早先这里用的是 `querySelectorAll('canvas')[index]` —— 那种写法在"将来往 DOM 里插一块画布"
+ * 时会**静默错位**（断言开始量另一块画布，还可能照样通过），属于本仓一直在防的"空门"。
+ * 改成 id 之后，顺序怎么变都不影响，意图也写在调用处。
  */
+
+/** 页面主体画布的 id（各页 index.html 里都是这个）。 */
+export const MAIN_CANVAS = 'canvas';
+/** 首页吸顶导航画布的 id。 */
+export const NAVBAR_CANVAS = 'navbar';
 
 /** 收集 pageerror 与 console error；用例收尾断言它是空的。 */
 export function collectErrors(page: Page): string[] {
@@ -30,10 +42,10 @@ export interface CanvasStats {
 }
 
 /** 采样统计画布内容。采样步长按面积自适应（约 1/16384 像素量级），够快也够稳。 */
-export async function canvasStats(page: Page, index = 0): Promise<CanvasStats> {
-  return page.evaluate((idx) => {
-    const canvas = document.querySelectorAll('canvas')[idx] as HTMLCanvasElement;
-    if (!canvas) throw new Error(`页面上没有第 ${idx + 1} 张画布`);
+export async function canvasStats(page: Page, canvasId = MAIN_CANVAS): Promise<CanvasStats> {
+  return page.evaluate((id) => {
+    const canvas = document.getElementById(id) as HTMLCanvasElement | null;
+    if (!canvas) throw new Error(`页面上没有 #${id} 画布`);
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('拿不到 2d context');
     const { width, height } = canvas;
@@ -76,32 +88,32 @@ export async function canvasStats(page: Page, index = 0): Promise<CanvasStats> {
       inkRatio: samples.length ? ink / samples.length : 0,
       colors: counts.size,
     };
-  }, index);
+  }, canvasId);
 }
 
 /**
  * 画布内部坐标 → 页面坐标。
  * 引擎按 `dpr` 把 backing store 放大过，所以不能直接拿内部坐标当 CSS 坐标点。
  */
-export async function canvasPoint(page: Page, x: number, y: number, index = 0) {
-  const box = await page.locator('canvas').nth(index).boundingBox();
-  if (!box) throw new Error('画布还没有布局盒子');
-  const size = await page.evaluate((idx) => {
-    const canvas = document.querySelectorAll('canvas')[idx] as HTMLCanvasElement;
+export async function canvasPoint(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
+  const box = await page.locator(`#${canvasId}`).boundingBox();
+  if (!box) throw new Error(`#${canvasId} 还没有布局盒子`);
+  const size = await page.evaluate((id) => {
+    const canvas = document.getElementById(id) as HTMLCanvasElement;
     return { width: canvas.width, height: canvas.height };
-  }, index);
+  }, canvasId);
   return { x: box.x + (x * box.width) / size.width, y: box.y + (y * box.height) / size.height };
 }
 
 /** 点画布上的一个**内部坐标**点（自动换算成页面坐标）。 */
-export async function clickCanvas(page: Page, x: number, y: number, index = 0) {
-  const point = await canvasPoint(page, x, y, index);
+export async function clickCanvas(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
+  const point = await canvasPoint(page, x, y, canvasId);
   await page.mouse.click(point.x, point.y);
 }
 
 /** 双击画布上的一个内部坐标点（桌面图标靠双击打开）。 */
-export async function dblclickCanvas(page: Page, x: number, y: number, index = 0) {
-  const point = await canvasPoint(page, x, y, index);
+export async function dblclickCanvas(page: Page, x: number, y: number, canvasId = MAIN_CANVAS) {
+  const point = await canvasPoint(page, x, y, canvasId);
   await page.mouse.dblclick(point.x, point.y);
 }
 
@@ -132,17 +144,18 @@ window.__rect = function (node) {
  * 断言"画布上确实画出了界面"，而不是一片空白。
  *
  * @param minInk   与主色明显不同的像素占比下限（实测正常页面 0.5%~70%）
- * @param minOpaque 画上去的像素占比下限。**默认 0.5 只适用于"铺满画布"的页面**
+ * @param options.minOpaque 画上去的像素占比下限。**默认 0.5 只适用于"铺满画布"的页面**
  *   （整机、游戏页都有全屏底色或全屏遮罩）。像游戏厅首页那样"画布透明、只画卡片"的版面，
- *   卡片本身只占画布面积的两三成，必须把这个值调低 —— 否则断言会因为"版面留白"而误报。
+ *   卡片本身只占画布面积的两三成，必须把这个值调低 —— 否则断言会因为"正常留白"而误报。
+ * @param options.canvasId 量哪块画布（默认页面主体；首页还有 `#navbar`）。
  */
 export async function expectCanvasPainted(
   page: Page,
   minInk = 0.02,
-  options: { minOpaque?: number; index?: number } = {},
+  options: { minOpaque?: number; canvasId?: string } = {},
 ) {
   const minOpaque = options.minOpaque ?? 0.5;
-  const stats = await canvasStats(page, options.index ?? 0);
+  const stats = await canvasStats(page, options.canvasId ?? MAIN_CANVAS);
   expect(stats.opaqueRatio, '画上去的像素占比（画布默认透明）').toBeGreaterThan(minOpaque);
   expect(stats.inkRatio, `与主色不同的像素占比，实测 ${stats.inkRatio.toFixed(4)}`).toBeGreaterThan(minInk);
   expect(stats.colors, '不同颜色数').toBeGreaterThan(8);
