@@ -80,6 +80,26 @@ src/
 回归闸门：`tests/games/convention.test.ts`（每个自研游戏必须"已迁 / 待迁"二选一，新增游戏
 默默写成函数式会红）。
 
+### 取色：界面色用主题引用，美术色豁免（2026-09-17）
+
+组件样式的颜色有两条写法，热切换只认第一条：
+
+- `fillStyle: token('ui.colors.text')`（**主题引用**，引擎 paint 时解析）→ 换主题跟着走 ✅
+- `theme.colors.text`（**构造期**取值）→ 停在旧主题上 ❌
+
+本仓 2026-09-17 把**直接进样式槽**的 17 处迁成了引用式（`kit/shell.ts` 14、首页 3），
+顺带把 `OVERLAY_STYLE` 那四支状态强调色（暂停 / 失败 / 胜利 / 就绪）从 Bootstrap 字面量换成 token。
+两条棘轮守着：
+
+| 棘轮 | 管什么 |
+|---|---|
+| `tests/games/themeRefs.test.ts` | 每个文件允许的 `theme.colors.*` 用量（当前 **35 处 / 5 文件**，只减不增） |
+| `tests/games/hardcodedColors.test.ts` | 写死色值必须**按文件**登记并写明理由（先剥注释再扫） |
+
+**豁免的是这些**（判据：换主题时它该不该变）：`src/machines/*`（上游同形整机）、
+`src/games/breakout/main.ts`（游戏美术调色板）、`src/home/{chrome,main,navbar}.ts`（品牌水滴定色与分类强调色）。
+**面板 / 文字 / 边框 / 状态色不许写在豁免里** —— 那是界面色。
+
 ### 成员顺序（2026-09-17 定，全家族同口径）
 
 页面类里的成员按这个顺序排 —— 棘轮里就是正则 `S*T*F*C*(A|M)*`：
