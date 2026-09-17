@@ -460,7 +460,8 @@ class HomePage extends GamePage {
       const group = GROUPS[index];
       this.buildSectionHeader({
         icon: section.kind === 'game' ? '▶' : '■',
-        iconColor: section.kind === 'game' ? this.theme.colors.primary : '#a370f7',
+        // 图标压在浅底小方块上 → 用 `*TextEmphasis` 那一档（primary 当字形只有 ~2.2:1）
+        iconColor: section.kind === 'game' ? this.theme.colors.primaryTextEmphasis : '#a370f7',
         label: section.label,
         blurb: `${section.blurb}　·　${group.items.length} 个`,
         top: section.headerTop,

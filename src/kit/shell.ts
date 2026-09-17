@@ -496,7 +496,8 @@ export class GameShell {
       width: cardWidth,
       align: 'center',
       text: '',
-      style: { fontSize: 26, fillStyle: theme.colors.primary },
+      // 文字用 `link`（primary 是填充色；暗色下当文字只有 2.96:1）
+      style: { fontSize: 26, fillStyle: theme.colors.link },
     });
     const title = new ICELabel({
       interactive: false,
