@@ -61,10 +61,16 @@ src/
   直接传方法会在回调里丢 `this`（改造时真踩了：暂停按钮与 e2e 句柄都会炸）；
 - **文件末尾 `new XxxPage();`** 启动，脚本里不出现模块级的 `function` / `let`。
 
-**迁移状态**：`src/games/breakout/main.ts` ✅ 已迁；`src/home/main.ts`、`src/machines/*` ⏳ 待迁
-（登记在 `tests/games/convention.test.ts` 的 `PENDING`）。脚手架模板
-`scripts/templates/game/main.ts` 已是新写法 —— **新游戏从第一天就合规**，
-`npm run new:game` 生成出来就是类。上游移植的 `src/ported/*` 是生成物，不在这个口径内。
+**迁移状态**：
+
+- `src/games/breakout/main.ts` ✅ 已迁；`scripts/templates/game/main.ts` ✅（新游戏从第一天就合规，
+  `npm run new:game` 生成出来就是类）；
+- `src/home/main.ts` ⏳ 待迁（登记在 `tests/games/convention.test.ts` 的 `PAGE_LEVEL_PENDING`）；
+- `src/machines/arcade/main.ts`、`src/machines/windows-xp/main.ts` ⊘ **按政策排除**（2026-09-17 定）：
+  它们是上游示例抽出来的 `// @ts-nocheck` 移植脚本，**继续跟上游同形**，不按本仓写法改 ——
+  这几页的价值在于"能和上游示例对照"，改了就再也对不上。清单在
+  `UPSTREAM_PARITY_EXCLUDED`，谁都看得出这是故意的；
+- 上游移植分区 `src/ported/*` 是生成物，同样不在这个口径内。
 
 回归闸门：`tests/games/convention.test.ts`（每个自研游戏必须"已迁 / 待迁"二选一，新增游戏
 默默写成函数式会红）。
