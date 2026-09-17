@@ -48,6 +48,27 @@ src/
 
 ## 铁律
 
+### 应用层写法：一页 = 一个类（2026-09-17 确立）
+
+家族的应用层统一到这个形状（库侧是 `ICEContainer` 契约，`ice-smart-water` 的 12 个页面、
+各仓示例页都这么写），游戏页不例外：
+
+- **页面基类是 `GamePage`**（`src/kit/page.ts`）：`class XxxPage extends GamePage`，
+  构造期把存档 / 音效 / 模型 / 节点池 / 外壳 / 输入 / 循环一次建好；
+- **刷新只有一个入口**：`render()` 负责"把 model 快照写到画面上"，
+  外壳状态与覆盖层走 `syncShell()`（相位跳变时调）；不要在别处零散地改画面；
+- **回调一律包箭头函数**：`onClick: () => this.togglePause()`、`worldRect: (n) => this.worldRect(n)` ——
+  直接传方法会在回调里丢 `this`（改造时真踩了：暂停按钮与 e2e 句柄都会炸）；
+- **文件末尾 `new XxxPage();`** 启动，脚本里不出现模块级的 `function` / `let`。
+
+**迁移状态**：`src/games/breakout/main.ts` ✅ 已迁；`src/home/main.ts`、`src/machines/*` ⏳ 待迁
+（登记在 `tests/games/convention.test.ts` 的 `PENDING`）。脚手架模板
+`scripts/templates/game/main.ts` 已是新写法 —— **新游戏从第一天就合规**，
+`npm run new:game` 生成出来就是类。上游移植的 `src/ported/*` 是生成物，不在这个口径内。
+
+回归闸门：`tests/games/convention.test.ts`（每个自研游戏必须"已迁 / 待迁"二选一，新增游戏
+默默写成函数式会红）。
+
 ### 1. `games` 与 `ported` 的分工不许混
 
 | 分区 | 能改吗 | 加东西的方式 |
