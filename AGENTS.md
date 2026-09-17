@@ -63,9 +63,9 @@ src/
 
 **迁移状态**：
 
-- `src/games/breakout/main.ts` ✅ 已迁；`scripts/templates/game/main.ts` ✅（新游戏从第一天就合规，
-  `npm run new:game` 生成出来就是类）；
-- `src/home/main.ts` ⏳ 待迁（登记在 `tests/games/convention.test.ts` 的 `PAGE_LEVEL_PENDING`）；
+- `src/games/breakout/main.ts` ✅、`src/home/main.ts` ✅（首页 = `class HomePage extends GamePage`）、
+  `scripts/templates/game/main.ts` ✅（新游戏从第一天就合规，`npm run new:game` 生成出来就是类）——
+  **本仓自研页面已全部迁完**，`PAGE_LEVEL_PENDING` 为空；
 - `src/machines/arcade/main.ts`、`src/machines/windows-xp/main.ts` ⊘ **按政策排除**（2026-09-17 定）：
   它们是上游示例抽出来的 `// @ts-nocheck` 移植脚本，**继续跟上游同形**，不按本仓写法改 ——
   这几页的价值在于"能和上游示例对照"，改了就再也对不上。清单在

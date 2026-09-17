@@ -18,8 +18,8 @@ const MIGRATED = new Set(['breakout']);
 /** 待迁：登记到此，迁完挪进 MIGRATED。 */
 const PENDING = new Set<string>([]);
 
-/** **页面级**待迁：不在 `games/<slug>/` 里，但同样是"一页"的自研文件。 */
-const PAGE_LEVEL_PENDING = new Set(['src/home/main.ts']);
+/** **页面级**待迁：不在 `games/<slug>/` 里，但同样是"一页"的自研文件。当前为空 —— 全迁完了。 */
+const PAGE_LEVEL_PENDING = new Set<string>([]);
 
 /**
  * **按政策排除**：这两台整机是从上游示例抽出来的移植脚本（`// @ts-nocheck`）。
