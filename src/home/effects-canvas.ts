@@ -299,7 +299,7 @@ export function mountEffects(): EffectsLayer {
     canvas.height = next;
     page.ice.refreshInputRect();
     field.resize(EFFECTS.width, next);
-    page.ice.dirty = true;
+    page.ice.requestRepaint();
   };
   window.addEventListener('resize', resize);
 
@@ -311,7 +311,7 @@ export function mountEffects(): EffectsLayer {
     loop.setPaused(true);
     field.step(0);
   }
-  page.ice.dirty = true;
+  page.ice.requestRepaint();
 
 
   return {

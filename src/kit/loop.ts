@@ -74,7 +74,7 @@ export function startLoop(
     onFrame(dt, now);
     // 显式置脏：游戏每帧都在改节点，但"每帧一定重绘"这件事由这里保证，
     // 免得某个游戏改了不触发失效链路的东西（如直接改 painter 状态）就不刷新。
-    if (markDirty) page.ice.dirty = true;
+    if (markDirty) page.ice.requestRepaint();
     rafId = requestAnimationFrame(tick);
   };
 
@@ -93,7 +93,7 @@ export function startLoop(
       if (typeof page.ice.setContinuousFrames === 'function') {
         page.ice.setContinuousFrames(!next);
       }
-      if (!next) page.ice.dirty = true;
+      if (!next) page.ice.requestRepaint();
     },
     get paused() {
       return paused;

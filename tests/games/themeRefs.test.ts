@@ -21,13 +21,8 @@ import * as path from 'node:path';
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 
 /** 每个文件允许的 `theme.colors.*` 用量（**当前实测值**，只能下调；改到 0 就从表里删）。 */
-const BUDGET: Record<string, number> = {
-  'home/main.ts': 20,
-  'home/footer.ts': 10,
-  'home/chrome.ts': 3,
-  'home/navbar.ts': 1,
-  'kit/shell.ts': 1,
-};
+/** 每个文件允许的 `theme.colors.*` 用量 —— **已经是空的**：界面色全部改成主题引用。 */
+const BUDGET: Record<string, number> = {};
 
 const walk = (dir: string, out: string[] = []): string[] => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

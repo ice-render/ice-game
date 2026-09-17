@@ -18,6 +18,7 @@
  * 同款根因与修复 —— `applyLayout()` 让缓冲跟随显示并用 `viewport.scale` 同步设计世界，详见
  * IIFE 末尾的 `applyLayout` 实现与 `src/machines/windows-xp/main.ts` 的注释。
  */
+import { token } from 'ice-render';
 import * as ICE from 'ice-render';
 import * as ICEWEB from 'ice-web-components';
 
@@ -222,7 +223,7 @@ import * as ICEWEB from 'ice-web-components';
             text: hint,
             align: 'center',
             verticalAlign: 'middle',
-            style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+            style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
           });
           box.addChild(titleLabel, false);
           box.addChild(hintLabel, false);
@@ -249,7 +250,7 @@ import * as ICEWEB from 'ice-web-components';
           width: COLUMN_W,
           height: 20,
           text: '',
-          style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
         });
 
         const card = (id, left, top, width, caption) => {
@@ -261,7 +262,7 @@ import * as ICEWEB from 'ice-web-components';
             width: width - 32,
             height: 18,
             text: caption,
-            style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+            style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
           });
           const value = new W.ICELabel({
             id,
@@ -291,7 +292,7 @@ import * as ICEWEB from 'ice-web-components';
           width: 220,
           height: 18,
           text: '升级进度',
-          style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
         });
         const progressBar = new W.ICEProgressBar({
           id: 'arcade-progress',
@@ -314,7 +315,7 @@ import * as ICEWEB from 'ice-web-components';
           text: '',
           align: 'right',
           verticalAlign: 'middle',
-          style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
         });
         progressPanel.addChild(progressCaption, false);
         progressPanel.addChild(progressBar, false);
@@ -328,7 +329,7 @@ import * as ICEWEB from 'ice-web-components';
           width: 268,
           height: 18,
           text: '',
-          style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
         });
         /** 卡带的侧栏内容挂在 sideBody 里。 */
         const sideBody = new W.ICEWidget({
@@ -365,7 +366,7 @@ import * as ICEWEB from 'ice-web-components';
                 height: 22,
                 text: label,
                 verticalAlign: 'middle',
-                style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+                style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
               });
               const val = new W.ICELabel({
                 interactive: false,
@@ -373,7 +374,7 @@ import * as ICEWEB from 'ice-web-components';
                 height: 22,
                 text: value,
                 verticalAlign: 'middle',
-                style: { fontSize: 12, fontFamily: '"Courier New", monospace', fillStyle: theme.colors.text },
+                style: { fontSize: 12, fontFamily: '"Courier New", monospace', fillStyle: token('ui.colors.text') },
               });
               row.addChild(key, false);
               row.addChild(val, false);
@@ -391,7 +392,7 @@ import * as ICEWEB from 'ice-web-components';
           width: 268,
           height: 18,
           text: '操作 CONTROLS',
-          style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
         });
         const helpBody = new W.ICEWidget({
           id: 'arcade-help-body',
@@ -420,14 +421,14 @@ import * as ICEWEB from 'ice-web-components';
               width: 96,
               height: 20,
               text: keys,
-              style: { fontSize: 13, fontFamily: '"Courier New", monospace', fillStyle: theme.colors.text },
+              style: { fontSize: 13, fontFamily: '"Courier New", monospace', fillStyle: token('ui.colors.text') },
             });
             const descLabel = new W.ICELabel({
               interactive: false,
               width: 164,
               height: 20,
               text: desc,
-              style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+              style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
             });
             row.addChild(keyLabel, false);
             row.addChild(descLabel, false);
@@ -481,7 +482,7 @@ import * as ICEWEB from 'ice-web-components';
           height: 22,
           text: '音效',
           verticalAlign: 'middle',
-          style: { fontSize: 13, fillStyle: theme.colors.text },
+          style: { fontSize: 13, fillStyle: token('ui.colors.text') },
         });
         // 最高分挪到副标题那一行（右侧对齐），把底部这排留给按钮
         const bestLabel = new W.ICELabel({
@@ -494,7 +495,7 @@ import * as ICEWEB from 'ice-web-components';
           text: '最高分 0',
           align: 'right',
           verticalAlign: 'middle',
-          style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
         });
         const footer = new W.ICELabel({
           interactive: false,
@@ -503,7 +504,7 @@ import * as ICEWEB from 'ice-web-components';
           width: COLUMN_W,
           height: 20,
           text: '五个纯逻辑模型（ICETetrisModel / ICESnakeModel / ICE2048Model / ICEChip8Model / ICEBiosModel）+ ICE 组件绘制 · 规则与渲染完全解耦',
-          style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
+          style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
         });
         soundSwitch.on('change', () => {
           sound.enabled = soundSwitch.isSelected();
@@ -570,14 +571,14 @@ import * as ICEWEB from 'ice-web-components';
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 '已暂停',
                 '按 P 继续',
-                theme.colors.warning,
+                token('ui.colors.warning'),
               );
               const overBox = ctx.messageBox(
                 'tetris-over',
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 'GAME OVER',
                 '按 R 再开一局',
-                theme.colors.error,
+                token('ui.colors.error'),
               );
 
               /** 侧栏：三个 NEXT 预览槽（每槽 4 个小格）。 */
@@ -869,14 +870,14 @@ import * as ICEWEB from 'ice-web-components';
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 '已暂停',
                 '按 P 继续',
-                theme.colors.warning,
+                token('ui.colors.warning'),
               );
               const overBox = ctx.messageBox(
                 'snake-over',
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 'GAME OVER',
                 '按 R 再开一局',
-                theme.colors.error,
+                token('ui.colors.error'),
               );
 
               /** 侧栏：速度 / 地图 / 转向队列 + 图例。 */
@@ -922,7 +923,7 @@ import * as ICEWEB from 'ice-web-components';
                   height: 44,
                   text: '蛇头',
                   verticalAlign: 'middle',
-                  style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+                  style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
                 }),
                 false,
               );
@@ -936,7 +937,7 @@ import * as ICEWEB from 'ice-web-components';
                   height: 44,
                   text: '食物 +10 分',
                   verticalAlign: 'middle',
-                  style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+                  style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
                 }),
                 false,
               );
@@ -1101,14 +1102,14 @@ import * as ICEWEB from 'ice-web-components';
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 '已暂停',
                 '按 P 继续',
-                theme.colors.warning,
+                token('ui.colors.warning'),
               );
               const overBox = ctx.messageBox(
                 'game2048-over',
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 'GAME OVER',
                 '按 R 再开一局',
-                theme.colors.error,
+                token('ui.colors.error'),
               );
 
               /** 侧栏：目标 / 最大块 / 提示。 */
@@ -1155,7 +1156,7 @@ import * as ICEWEB from 'ice-web-components';
                     height: 44,
                     text: value,
                     verticalAlign: 'middle',
-                    style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+                    style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
                   }),
                   false,
                 );
@@ -1344,7 +1345,7 @@ import * as ICEWEB from 'ice-web-components';
                 { left: originX, top: originY + boardH / 2 - 46, width: boardW, height: 92 },
                 '已暂停',
                 '按 P 继续',
-                theme.colors.warning,
+                token('ui.colors.warning'),
               );
               const infoRows = createInfoRows(ctx.sideBody);
               const info = [['ROM', 'demo · 绕屏笑脸'], ['频率', '600 指令/秒'], ['按键', '1234 QWER ASDF ZXCV']].map(([label, value]) =>
@@ -1708,7 +1709,7 @@ import * as ICEWEB from 'ice-web-components';
               : '↑↓ 选择 · Enter 启动卡带 · F2 回游戏',
           );
           biosNodes.layer.dirty = true;
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         /** BIOS 期间的 HUD / 侧栏 / 操作说明（和卡带用同一批组件，只是换了文案）。 */
@@ -1746,7 +1747,7 @@ import * as ICEWEB from 'ice-web-components';
               height: 22,
               text: `${isDefault ? '★' : ' '} ${item.label}`,
               verticalAlign: 'middle',
-              style: { fontSize: 13, fillStyle: isDefault ? theme.colors.primary : theme.colors.textSecondary },
+              style: { fontSize: 13, fillStyle: isDefault ? token('ui.colors.primary') : token('ui.colors.textSecondary') },
             });
             sideBody.addChild(label, false);
           });
@@ -1772,7 +1773,7 @@ import * as ICEWEB from 'ice-web-components';
                   ['★', '默认卡带'],
                 ],
           );
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         /** 清掉卡带、把 BIOS 层摆上屏幕。 */
@@ -1801,7 +1802,7 @@ import * as ICEWEB from 'ice-web-components';
           window.__arcade.model = null;
           window.__arcade.runtime = null;
           window.__arcade.game = null;
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         /** 从游戏回到 BIOS 菜单（掌机的「复位」）。 */
@@ -1926,7 +1927,7 @@ import * as ICEWEB from 'ice-web-components';
           runtime.setOverlay(paused, over);
           bestLabel.setText(hasScores(currentKey) ? `最高分 ${scores[currentKey].getBest()}` : 'CHIP-8 · 无排行榜');
           runtime.paint();
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         // 结束时的最高分落盘（每个卡带各记一份）
@@ -2275,7 +2276,7 @@ import * as ICEWEB from 'ice-web-components';
           ice.viewport.scale = boxW / DESIGN_W;
           ice.viewport.tx = 0;
           ice.viewport.ty = 0;
-          ice.dirty = true; // 触发整帧重绘（视口变化也会让静态层缓存失效）
+          ice.requestRepaint(); // 触发整帧重绘（视口变化也会让静态层缓存失效）
         };
         applyLayout();
         let __layoutRaf = 0;

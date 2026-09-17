@@ -92,7 +92,7 @@ export function createInput(page: GamePage, options: InputOptions = {}): InputHa
     const set = handlers.get(action);
     if (set) for (const handler of [...set]) handler(event);
     // 有些键（空格 / 方向键）在部分浏览器里 keydown 后还会冒泡成滚动，再挡一次
-    page.ice.dirty = true;
+    page.ice.requestRepaint();
   }
 
   function onKeyUp(event: KeyboardEvent): void {

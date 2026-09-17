@@ -41,6 +41,12 @@ export class GamePage {
   /** 引擎实例。 */
   ice: any;
   /** 当前主题 token（街机主题）。 */
+  /**
+   * 构建期的主题快照 —— **只用于非颜色用途**（阴影、间距这类）。
+   *
+   * ⚠️ 颜色一律写**主题引用** `token('ui.colors.x')`：存下来的颜色会冻在构造那一刻，
+   * 切主题时不重建页面就不会变（家族里实测过这个坑：图例整块 253 个节点一个颜色都没变）。
+   */
   theme: any;
   canvas: HTMLCanvasElement;
   /** 画布设计宽（来自 `<canvas width>`）。 */

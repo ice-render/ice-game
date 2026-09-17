@@ -21,7 +21,7 @@ import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO, reposInGroup } from '../domain/fa
 import { stats } from '../domain/catalog';
 import type { GamePage } from '../kit';
 import { brandBadge, createLink, measureTextWidth, textWidth } from './chrome';
-import { token } from 'ice-render';
+import { token, type ICEThemeTokenRef } from 'ice-render';
 
 /* --------------------------------- 度量常量 --------------------------------- */
 
@@ -145,8 +145,8 @@ function footerColumns(): FooterColumn[] {
  * **渲染与量宽共用这一份** —— 这是本文件的核心约定（`layoutFooter` 与 `buildFooter`
  * 共用同一份布局的同一思路）：如果量宽那边自己写一份文案，改文案时宽度就悄悄不对了。
  *
- * `colorKey` 指向 `theme.colors` 里的键，渲染时再解析成真实色值
- * （量宽不需要颜色，所以这里不持有主题引用）。
+ * `colorKey` 指向 token 表里的键名，渲染时拼成**主题引用**（`token('ui.colors.' + key)`）——
+ * 引用是 paint 时解析的，所以切主题跟着走（量宽不需要颜色，这份表只记键名）。
  */
 function brandLines(): { text: string; top: number; fontSize: number; colorKey: string }[] {
   const { games, machines, features } = stats();
@@ -317,7 +317,6 @@ export interface FooterHandle {
 
 export function buildFooter(options: FooterOptions): FooterHandle {
   const { page, left, top, width } = options;
-  const theme = page.theme;
   const openLink = options.openLink || ((url: string) => window.open(url, '_blank', 'noopener,noreferrer'));
   const { columns, noteTop, brandWidth, colWidths, colLefts } = layoutFooter(width);
   const links: FooterLinkRef[] = [];
@@ -347,7 +346,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
     y: number,
     w: number,
     fontSize: number,
-    color: string,
+    color: string | ICEThemeTokenRef,
     extra: { align?: 'left' | 'center' | 'right' } = {},
   ) =>
     page.ice.addChild(
@@ -367,11 +366,11 @@ export function buildFooter(options: FooterOptions): FooterHandle {
 
   /* ------------------------------ 左侧：品牌与许可 ------------------------------ */
 
-  brandBadge(page.ice, { left, top: contentTop, size: M.badgeSize, accent: theme.colors.primary });
-  plainText('ICE GAME', left + M.badgeSize + 10, contentTop, brandWidth - M.badgeSize - 10, 16, theme.colors.text);
+  brandBadge(page.ice, { left, top: contentTop, size: M.badgeSize, accent: token('ui.colors.primary') });
+  plainText('ICE GAME', left + M.badgeSize + 10, contentTop, brandWidth - M.badgeSize - 10, 16, token('ui.colors.text'));
   // 左栏的说明文字来自 `brandLines()` —— 与量宽用的是同一份文案（否则改文案就悄悄截断）
   for (const line of brandLines()) {
-    plainText(line.text, left, contentTop + line.top, brandWidth, line.fontSize, theme.colors[line.colorKey]);
+    plainText(line.text, left, contentTop + line.top, brandWidth, line.fontSize, token(`ui.colors.${line.colorKey}`));
   }
 
   /* 封面覆盖率：加了游戏却忘了跑 `npm run covers` 时，这里一眼看得出来。 */
@@ -380,7 +379,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
     const { done, total } = options.coverProgress;
     coverProgress = { done, total };
     const progressTop = contentTop + M.progressTop;
-    plainText('封面覆盖率', left, progressTop - 2, M.progressLabelWidth, 11, theme.colors.textTertiary);
+    plainText('封面覆盖率', left, progressTop - 2, M.progressLabelWidth, 11, token('ui.colors.textTertiary'));
     const barLeft = left + M.progressLabelWidth;
     const barWidth = Math.max(40, brandWidth - M.progressLabelWidth - M.progressCountWidth);
     page.ice.addChild(
@@ -404,7 +403,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
       progressTop - 2,
       M.progressCountWidth,
       11,
-      done >= total ? theme.colors.success : theme.colors.error,
+      done >= total ? token('ui.colors.success') : token('ui.colors.error'),
       { align: 'right' },
     );
   }
@@ -417,7 +416,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
   columns.forEach((column, colIndex) => {
     const x = colsLeft + colLefts[colIndex];
     const colWidth = colWidths[colIndex];
-    plainText(column.title, x, contentTop, colWidth, 12, theme.colors.textTertiary);
+    plainText(column.title, x, contentTop, colWidth, 12, token('ui.colors.textTertiary'));
 
     for (const row of column.rows) {
       const y = contentTop + row.offsetY;
@@ -432,16 +431,16 @@ export function buildFooter(options: FooterOptions): FooterHandle {
           fontSize: 13,
           paddingX: 0,
           align: 'left',
-          accent: theme.colors.primary,
+          accent: token('ui.colors.primary'),
           onClick: () => openLink(row.url as string),
         });
         links.push({ id: row.id as string, text: row.text, url: row.url });
       } else {
         // 没有地址 → 如实渲染成纯文本（不编链接），一眼看得出"待发布"
-        plainText(`${row.text}（未开源）`, x, y, colWidth, 13, theme.colors.textSecondary);
+        plainText(`${row.text}（未开源）`, x, y, colWidth, 13, token('ui.colors.textSecondary'));
       }
       if (row.role) {
-        plainText(row.role, x, y + M.rowLink, colWidth, 11, theme.colors.textTertiary);
+        plainText(row.role, x, y + M.rowLink, colWidth, 11, token('ui.colors.textTertiary'));
       }
     }
   });
@@ -458,7 +457,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
     noteY,
     width - rightWidth - 20,
     12,
-    theme.colors.textTertiary,
+    token('ui.colors.textTertiary'),
   );
   page.ice.addChild(
     new ICELabel({
