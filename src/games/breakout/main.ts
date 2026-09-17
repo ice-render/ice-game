@@ -13,7 +13,7 @@
  * **一页 = 一个类**（家族约定，见 AGENTS「应用层写法」）：构造期把存档 / 音效 / 模型 / 节点池 /
  * 外壳 / 输入 / 循环一次建好；`render()` 是唯一的"重画一遍"入口，外壳状态走 `syncShell()`。
  */
-import { ICECircle, ICERect } from 'ice-render';
+import { ICECircle, ICERect, token } from 'ice-render';
 import { ICEPanel } from 'ice-web-components';
 import { GamePage, createAudio, createHighScores, createInput, createStore, GameShell, startLoop } from '../../kit';
 import { BreakoutModel, type Brick, type BreakoutEvent } from './model';
@@ -74,7 +74,7 @@ class BreakoutPage extends GamePage {
       height: STAGE.height,
       radius: 10,
       interactive: false,
-      style: { fillStyle: '#0b1018', strokeStyle: theme.colors.borderSecondary },
+      style: { fillStyle: '#0b1018', strokeStyle: token('ui.colors.borderSecondary') },
     });
     this.ice.addChild(stageRoot);
 

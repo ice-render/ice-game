@@ -21,6 +21,7 @@ import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO, reposInGroup } from '../domain/fa
 import { stats } from '../domain/catalog';
 import type { GamePage } from '../kit';
 import { brandBadge, createLink, measureTextWidth, textWidth } from './chrome';
+import { token } from 'ice-render';
 
 /* --------------------------------- 度量常量 --------------------------------- */
 
@@ -467,7 +468,7 @@ export function buildFooter(options: FooterOptions): FooterHandle {
       width: rightWidth,
       align: 'right',
       text: rightText,
-      style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
+      style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
     }),
   );
 

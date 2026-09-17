@@ -24,7 +24,7 @@
  *
  * 所有节点坐标都是**画布绝对坐标**（外壳根容器固定在 0,0，所以容器内坐标 = 画布坐标）。
  */
-import { ICEBoxLayout } from 'ice-render';
+import { ICEBoxLayout, token, type ICEThemeTokenRef } from 'ice-render';
 import { ICEButton, ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import type { GamePage } from './page';
 
@@ -34,7 +34,8 @@ export interface ShellStat {
   /** 初始值（默认空）。 */
   value?: string;
   /** 数值强调色（默认主题文本色）。 */
-  accent?: string;
+  /** 允许主题引用（`token('ui.colors.warning')` 这类）—— 引用是 paint 时解析的，热切换跟得上。 */
+  accent?: string | ICEThemeTokenRef;
   /** 卡宽；不填则按可用宽度均分。 */
   width?: number;
 }
@@ -81,11 +82,14 @@ export interface OverlaySpec {
   hint?: string;
 }
 
-const OVERLAY_STYLE: Record<OverlaySpec['kind'], { accent: string; glyph: string }> = {
-  paused: { accent: '#ffc107', glyph: '❚❚' },
-  over: { accent: '#dc3545', glyph: '✕' },
-  win: { accent: '#198754', glyph: '★' },
-  ready: { accent: '#0d6efd', glyph: '▶' },
+// `accent` 允许主题引用（四个状态强调色就是），所以类型不是 string。
+const OVERLAY_STYLE: Record<OverlaySpec['kind'], { accent: string | ICEThemeTokenRef; glyph: string }> = {
+  // 这四支是**语义状态色**（暂停 / 失败 / 胜利 / 就绪）——走主题引用，
+  // 换主题（含街机主题）时它们跟着走，而不是钉在 Bootstrap 的默认色上。
+  paused: { accent: token('ui.colors.warning'), glyph: '❚❚' },
+  over: { accent: token('ui.colors.error'), glyph: '✕' },
+  win: { accent: token('ui.colors.success'), glyph: '★' },
+  ready: { accent: token('ui.colors.primary'), glyph: '▶' },
 };
 
 /** 数值卡高度、行距、帮助行高：外壳的纵向节奏由这几个数决定。 */
@@ -209,7 +213,7 @@ export class GameShell {
         top: titleTop,
         width: stage.width,
         text: options.title,
-        style: { fontSize: 26, fontWeight: '700', fillStyle: theme.colors.text },
+        style: { fontSize: 26, fontWeight: '700', fillStyle: token('ui.colors.text') },
       }),
       false,
     );
@@ -221,7 +225,7 @@ export class GameShell {
           top: titleTop + 36,
           width: stage.width,
           text: options.subtitle,
-          style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
         }),
         false,
       );
@@ -234,7 +238,7 @@ export class GameShell {
       width: 220,
       align: 'right',
       text: '',
-      style: { fontSize: 13, fillStyle: theme.colors.textTertiary },
+      style: { fontSize: 13, fillStyle: token('ui.colors.textTertiary') },
     });
     this.root.addChild(this.statusNode, false);
 
@@ -271,8 +275,8 @@ export class GameShell {
           radius: 10,
           interactive: false,
           style: {
-            fillStyle: theme.colors.surface,
-            strokeStyle: theme.colors.borderSecondary,
+            fillStyle: token('ui.colors.surface'),
+            strokeStyle: token('ui.colors.borderSecondary'),
           },
         });
         const labelNode = new ICELabel({
@@ -281,7 +285,7 @@ export class GameShell {
           top: 11,
           width: width - 28,
           text: stat.label,
-          style: { fontSize: 12, fillStyle: theme.colors.textTertiary },
+          style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
         });
         const valueNode = new ICELabel({
           interactive: false,
@@ -381,7 +385,7 @@ export class GameShell {
             width: HELP_KEY_WIDTH,
             height: HELP_ROW_HEIGHT,
             text: keys,
-            style: { fontSize: 13, fontFamily: '"Courier New", monospace', fillStyle: theme.colors.text },
+            style: { fontSize: 13, fontFamily: '"Courier New", monospace', fillStyle: token('ui.colors.text') },
           }),
           false,
         );
@@ -391,7 +395,7 @@ export class GameShell {
             width: stage.width - HELP_KEY_WIDTH - 10,
             height: HELP_ROW_HEIGHT,
             text: desc,
-            style: { fontSize: 13, fillStyle: theme.colors.textSecondary },
+            style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
           }),
           false,
         );
@@ -487,7 +491,7 @@ export class GameShell {
       height: cardHeight,
       radius: 14,
       interactive: false,
-      style: { fillStyle: theme.colors.elevated, strokeStyle: theme.colors.border },
+      style: { fillStyle: token('ui.colors.elevated'), strokeStyle: token('ui.colors.border') },
     });
     const glyph = new ICELabel({
       interactive: false,
@@ -497,7 +501,7 @@ export class GameShell {
       align: 'center',
       text: '',
       // 文字用 `link`（primary 是填充色；暗色下当文字只有 2.96:1）
-      style: { fontSize: 26, fillStyle: theme.colors.link },
+      style: { fontSize: 26, fillStyle: token('ui.colors.link') },
     });
     const title = new ICELabel({
       interactive: false,
@@ -506,7 +510,7 @@ export class GameShell {
       width: cardWidth,
       align: 'center',
       text: '',
-      style: { fontSize: 24, fontWeight: '700', fillStyle: theme.colors.text },
+      style: { fontSize: 24, fontWeight: '700', fillStyle: token('ui.colors.text') },
     });
     const subtitle = new ICELabel({
       interactive: false,
@@ -515,7 +519,7 @@ export class GameShell {
       width: cardWidth,
       align: 'center',
       text: '',
-      style: { fontSize: 14, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 14, fillStyle: token('ui.colors.textSecondary') },
     });
     const hint = new ICELabel({
       interactive: false,
@@ -524,7 +528,7 @@ export class GameShell {
       width: cardWidth,
       align: 'center',
       text: '',
-      style: { fontSize: 13, fillStyle: theme.colors.textTertiary },
+      style: { fontSize: 13, fillStyle: token('ui.colors.textTertiary') },
     });
     card.addChild(glyph, false);
     card.addChild(title, false);

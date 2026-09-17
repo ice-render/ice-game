@@ -37,6 +37,7 @@ import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import { FAMILY_HOME, FAMILY_REPOS } from '../domain/family-repos';
 import { GamePage } from '../kit';
 import { brandBadge, createLink, textWidth, type LinkHandle } from './chrome';
+import { token } from 'ice-render';
 
 /** 导航栏画布尺寸（CSS 里同步引用高度，改这里就够）。 */
 export const NAVBAR = {
@@ -201,7 +202,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
       align: 'left',
       verticalAlign: 'middle',
       text: 'ICE GAME',
-      style: { fontSize: 18, fontWeight: '700', fillStyle: theme.colors.text },
+      style: { fontSize: 18, fontWeight: '700', fillStyle: token('ui.colors.text') },
     }),
     false,
   );
