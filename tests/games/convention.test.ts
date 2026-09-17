@@ -18,6 +18,20 @@ const MIGRATED = new Set(['breakout']);
 /** 待迁：登记到此，迁完挪进 MIGRATED。 */
 const PENDING = new Set<string>([]);
 
+/**
+ * **页面级**文件（不在 `games/<slug>/` 里，但同样是"一页"）的迁移状态。
+ *
+ * - `src/home/main.ts`（1293 行）：自研首页，待迁；
+ * - `src/machines/arcade/main.ts`（2286 行）与 `src/machines/windows-xp/main.ts`（3313 行）：
+ *   `// @ts-nocheck` 的上游移植脚本（`sync-upstream` 抽出来后收归自维护）。它们不在类型检查里，
+ *   迁成类之前要先决定"是否还跟着上游" —— 所以单独列在这里，别默默当成漏了。
+ */
+const PAGE_LEVEL_PENDING = new Set([
+  'src/home/main.ts',
+  'src/machines/arcade/main.ts',
+  'src/machines/windows-xp/main.ts',
+]);
+
 const gameDirs = fs
   .readdirSync(GAMES_DIR, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -61,5 +75,22 @@ describe('游戏页写法棘轮（一页一个类）', () => {
 
   it('至少扫到一个游戏目录（防目录改名后静默空转）', () => {
     expect(gameDirs.length).toBeGreaterThan(0);
+  });
+
+  it('页面级待迁清单里的文件都真实存在，且确实还没迁（防清单悄悄过期）', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const bad: string[] = [];
+    for (const rel of PAGE_LEVEL_PENDING) {
+      const file = path.join(repoRoot, rel);
+      if (!fs.existsSync(file)) {
+        bad.push(`${rel} 不存在（迁完请从清单里删掉）`);
+        continue;
+      }
+      const s = statsOf(file);
+      if (s.classes === 1 && s.topFn === 0 && s.topLet === 0) {
+        bad.push(`${rel} 已经迁完（类${s.classes}/fn${s.topFn}/let${s.topLet}），请从清单里删掉`);
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });
