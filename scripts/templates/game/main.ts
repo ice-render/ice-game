@@ -11,7 +11,7 @@
  * `model.ts` 与下面的 `render()`，其余部分可以原样保留。
  */
 import { ICEPanel } from 'ice-web-components';
-import { createAudio, createHighScores, createInput, createPage, createStore, GameShell, startLoop } from '../../kit';
+import { GamePage, createAudio, createHighScores, createInput, createStore, GameShell, startLoop } from '../../kit';
 import { __NAME__Model, type __NAME__Event } from './model';
 
 /* --------------------------------- 版面 --------------------------------- */
@@ -19,7 +19,7 @@ import { __NAME__Model, type __NAME__Event } from './model';
 /** 游戏区（stage 局部坐标系的原点在这里）。 */
 const STAGE = { left: 230, top: 170, width: 720, height: 470 };
 
-const page = createPage();
+const page = new GamePage();
 const theme = page.theme;
 
 /* ------------------------------ 存档与音效 ------------------------------ */

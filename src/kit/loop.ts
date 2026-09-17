@@ -20,7 +20,7 @@
  * - **暂停要连"持续帧"一起关**：只停 `onFrame` 的话，引擎仍在每帧重绘（白耗电）；
  *   恢复时再打开，`setContinuousFrames` 会自己唤醒 rAF 循环。
  */
-import type { GamePageHandle } from './page';
+import type { GamePage } from './page';
 
 export interface LoopHandle {
   /** 停止循环（不可恢复；页面卸载或换关卡重建时用）。 */
@@ -45,7 +45,7 @@ export interface LoopOptions {
 export const DEFAULT_MAX_DELTA = 120;
 
 export function startLoop(
-  page: GamePageHandle,
+  page: GamePage,
   onFrame: (dt: number, now: number) => void,
   options: LoopOptions = {},
 ): LoopHandle {

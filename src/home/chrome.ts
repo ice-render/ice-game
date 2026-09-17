@@ -9,7 +9,7 @@
  */
 import { ICEImage } from 'ice-render';
 import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
-import type { GamePageHandle } from '../kit';
+import type { GamePage } from '../kit';
 
 /**
  * 文本宽度估算。
@@ -234,7 +234,7 @@ export interface LinkHandle {
  * `trigger('hoverchange', null, { hovered })`，而 `trigger(name, originalEvent, param)`
  * 把数据放进 `evt.param` —— 直接读 `payload.hovered` 恒为 `undefined` 且不报错（踩过）。
  */
-export function createLink(parent: any, page: GamePageHandle, options: LinkOptions): LinkHandle {
+export function createLink(parent: any, page: GamePage, options: LinkOptions): LinkHandle {
   const theme = page.theme;
   const fontSize = options.fontSize || 13;
   const paddingX = options.paddingX ?? 10;

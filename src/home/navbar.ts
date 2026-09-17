@@ -35,7 +35,7 @@
  */
 import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import { FAMILY_HOME, FAMILY_REPOS } from '../domain/family-repos';
-import { createPage, type GamePageHandle } from '../kit';
+import { GamePage } from '../kit';
 import { brandBadge, createLink, textWidth, type LinkHandle } from './chrome';
 
 /** 导航栏画布尺寸（CSS 里同步引用高度，改这里就够）。 */
@@ -73,7 +73,7 @@ export interface NavbarOptions {
 }
 
 export interface NavbarHandle {
-  page: GamePageHandle;
+  page: GamePage;
   width: number;
   height: number;
   sections: NavbarSection[];
@@ -97,7 +97,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
   canvas.width = NAVBAR.width;
   canvas.height = NAVBAR.height;
 
-  const page = createPage({ canvasId: 'navbar', continuousFrames: false });
+  const page = new GamePage({ canvasId: 'navbar', continuousFrames: false });
   const theme = page.theme;
   const accent = theme.colors.primary;
 
