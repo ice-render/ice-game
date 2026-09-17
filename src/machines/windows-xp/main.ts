@@ -633,7 +633,9 @@ import * as ICEWEB from 'ice-web-components';
       /* ============================ 窗口系统 ============================ */
       const iconLayer = new W.ICEWidget({ left: 0, top: 0, width: SCREEN_W, height: DESKTOP_H, fill: false, stroke: false, interactive: false });
       desktop.addChild(iconLayer, false);
-      const windowLayer = new W.ICEWidget({ left: 0, top: 0, width: SCREEN_W, height: DESKTOP_H, fill: false, stroke: false });
+      // ⚠️ `interactive: false` 不能漏：全屏容器可命中就会吞掉下面整层（桌面图标点不动）。
+      // 引擎 2.13.0 起渲染/命中是「树序 + 兄弟按 zIndex」——后加的兄弟在上面，漏掉立刻暴露。
+      const windowLayer = new W.ICEWidget({ left: 0, top: 0, width: SCREEN_W, height: DESKTOP_H, fill: false, stroke: false, interactive: false });
       desktop.addChild(windowLayer, false);
 
       let topZ = 100;
