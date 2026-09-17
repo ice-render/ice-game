@@ -12,7 +12,7 @@
  */
 import { ICECircle, ICERect } from 'ice-render';
 import { ICEPanel } from 'ice-web-components';
-import { createAudio, createHighScores, createInput, createPage, createStore, GameShell, startLoop } from '../../kit';
+import { GamePage, createAudio, createHighScores, createInput, createStore, GameShell, startLoop } from '../../kit';
 import { BreakoutModel, type Brick, type BreakoutEvent } from './model';
 
 /* --------------------------------- 版面 --------------------------------- */
@@ -32,7 +32,7 @@ import { BreakoutModel, type Brick, type BreakoutEvent } from './model';
  */
 const STAGE = { left: 230, top: 178, width: 720, height: 440 };
 
-const page = createPage();
+const page = new GamePage();
 const theme = page.theme;
 
 /* -------------------------------- 存档与音效 -------------------------------- */

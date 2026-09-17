@@ -27,7 +27,7 @@
  */
 import { ICEComponent } from 'ice-render';
 import { ICEPanel } from 'ice-web-components';
-import { createPage, startLoop, type GamePageHandle, type LoopHandle } from '../kit';
+import { GamePage, startLoop, type LoopHandle } from '../kit';
 
 /** 效果画布尺寸。宽度与页面主体同宽（左右对齐），高度跟随视口。 */
 export const EFFECTS = {
@@ -233,7 +233,7 @@ class AmbientField extends ICEComponent {
 }
 
 export interface EffectsLayer {
-  page: GamePageHandle;
+  page: GamePage;
   loop: LoopHandle;
   /** 跟随视口高度调整尺寸（已挂 window resize）。 */
   resize(): void;
@@ -256,7 +256,7 @@ export function mountEffects(): EffectsLayer {
   canvas.width = EFFECTS.width;
   canvas.height = height;
 
-  const page = createPage({ canvasId: 'bg', continuousFrames: false });
+  const page = new GamePage({ canvasId: 'bg', continuousFrames: false });
 
   /** 底色：一层很淡的径向渐变，让背景不是纯平（画布自身透明，露出的还是 body 的底色）。 */
   const base = page.ice.createRadialGradient(

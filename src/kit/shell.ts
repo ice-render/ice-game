@@ -26,7 +26,7 @@
  */
 import { ICEBoxLayout } from 'ice-render';
 import { ICEButton, ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
-import type { GamePageHandle } from './page';
+import type { GamePage } from './page';
 
 export interface ShellStat {
   id: string;
@@ -61,7 +61,7 @@ export interface ShellStage {
 }
 
 export interface ShellOptions {
-  page: GamePageHandle;
+  page: GamePage;
   title: string;
   subtitle?: string;
   /** 游戏画面占的矩形（画布坐标）。外壳围着它排，默认居中 720×460。 */
@@ -127,7 +127,7 @@ const SOUND_ON_LABEL = '音效 开';
 const SOUND_OFF_LABEL = '音效 关';
 
 export class GameShell {
-  readonly page: GamePageHandle;
+  readonly page: GamePage;
   readonly root: any;
   readonly overlayRoot: any;
   readonly stage: ShellStage;

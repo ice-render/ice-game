@@ -17,7 +17,7 @@ import rawCatalog from './catalog.generated.json';
 export type PageKind = 'game' | 'machine';
 
 /** 一个页面（= 一个入口 = 一个 HTML）。 */
-export interface GamePage {
+export interface CatalogPage {
   /** 稳定标识，同时是目录名、chunk 名与页面 URL（`<slug>.html`）；不要改。 */
   slug: string;
   kind: PageKind;
@@ -47,7 +47,7 @@ export interface GamePage {
  * 生成物由 `scan-games.cjs` 校验过（slug/kind/必填字段），测试里还会再断言一次字段合法性 ——
  * 类型断言在这里只是"不再重复表达同一件事"。
  */
-const PAGES: GamePage[] = (rawCatalog as unknown as { pages: GamePage[] }).pages;
+const PAGES: CatalogPage[] = (rawCatalog as unknown as { pages: CatalogPage[] }).pages;
 
 export { PAGES };
 
@@ -58,7 +58,7 @@ export interface PageGroup {
   label: string;
   /** 分组说明（写在标题右侧或下方，可空）。 */
   blurb: string;
-  items: GamePage[];
+  items: CatalogPage[];
 }
 
 /**
@@ -80,7 +80,7 @@ export const GROUPS: PageGroup[] = GROUP_META.map((meta) => ({
 })).filter((group) => group.items.length > 0);
 
 /** 按 slug 找页面；找不到返回 `undefined`（不抛错，调用方自己决定怎么兜）。 */
-export function findPage(slug: string): GamePage | undefined {
+export function findPage(slug: string): CatalogPage | undefined {
   return PAGES.find((page) => page.slug === slug);
 }
 
@@ -109,7 +109,7 @@ export function entryPages(): string[] {
  * 只对 `cover === true` 的页返回；调用方（首页）据此决定画封面还是占位块。
  * 路径与 `webpack.config.js` 的 `CopyCoversPlugin` 约定一致（`dist/covers/<slug>.png`）。
  */
-export function coverUrl(page: GamePage): string | null {
+export function coverUrl(page: CatalogPage): string | null {
   return page.cover ? `covers/${page.slug}.png` : null;
 }
 

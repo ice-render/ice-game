@@ -28,7 +28,7 @@
  * 4. **大小写**：`event.key` 对大写字母是 `'A'`，所以绑定时两种都列上（或用 `key.toLowerCase()`）。
  *    这里统一按"原样 + 小写"双匹配，绑一次就够。
  */
-import type { GamePageHandle } from './page';
+import type { GamePage } from './page';
 
 export interface InputOptions {
   /** 动作 → 物理按键列表（`event.key` 的取值）。 */
@@ -53,7 +53,7 @@ export interface InputHandle {
   destroy(): void;
 }
 
-export function createInput(page: GamePageHandle, options: InputOptions = {}): InputHandle {
+export function createInput(page: GamePage, options: InputOptions = {}): InputHandle {
   const preventDefault = options.preventDefault !== false;
   const repeatable = new Set(options.repeatable || []);
 

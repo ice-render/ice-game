@@ -1,11 +1,19 @@
 /**
- * 小游戏的页面底座：一行拿到「引擎 + 主题 + 画布尺寸」。
+ * 小游戏的**页面基类**：`class XxxPage extends GamePage` 就拿到「引擎 + 主题 + 画布尺寸」。
  *
  * ```ts
- * const page = createPage();               // 读 <canvas id="canvas">，自动处理 dpr
- * const board = new ICEPanel({ ... });
- * page.ice.addChild(board);
+ * class BreakoutPage extends GamePage {
+ *   constructor() {
+ *     super();                             // 读 <canvas id="canvas">，自动处理 dpr
+ *     const board = new ICEPanel({ ... });
+ *     this.ice.addChild(board);
+ *   }
+ * }
  * ```
+ *
+ * 为什么是类而不是工厂：家族的应用层统一到「**一页 = 一个类**」（`ICEContainer` 契约 + 各仓
+ * 的示例页都这么写）。游戏页也不例外 —— 玩法状态、外壳、输入、循环都是这一页的成员，
+ * 调试句柄 `window.__game.page` 直接就是这个实例。
  *
  * 它替每个游戏做掉这几件必然会重复、且**做错了很难查**的事：
  *
@@ -29,16 +37,48 @@ export interface Rect {
   height: number;
 }
 
-export interface GamePageHandle {
+export class GamePage {
   /** 引擎实例。 */
   ice: any;
-  /** 当前主题 token。 */
+  /** 当前主题 token（街机主题）。 */
   theme: any;
   canvas: HTMLCanvasElement;
   /** 画布设计宽（来自 `<canvas width>`）。 */
   width: number;
   /** 画布设计高。 */
   height: number;
+
+  /**
+   * 初始化游戏页面。
+   *
+   * ⚠️ 必须在 DOM 就绪后调用（脚本用 `defer` 注入，所以默认就是就绪的）。
+   */
+  constructor(options: CreatePageOptions = {}) {
+    const canvasId = options.canvasId || 'canvas';
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+    if (!canvas) {
+      throw new Error(`GamePage：找不到 <canvas id="${canvasId}">`);
+    }
+
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    this.ice = new ICE().init(canvasId, { dpr });
+
+    // 街机主题是完整主题（token 组与内置 dark 一致，只换颜色），小游戏统一用它。
+    // 第二个参数把主题也同步给引擎（选中框 / 手柄 / 插槽等外壳 token）。
+    iceUIManager.registerTheme('arcade', ICE_ARCADE_THEME).setTheme('arcade', this.ice);
+    this.theme = iceUIManager.getTheme();
+
+    new ICEHoverManager(this.ice).start();
+
+    if (options.continuousFrames !== false) {
+      this.ice.setContinuousFrames(true);
+    }
+
+    this.canvas = canvas;
+    this.width = canvas.width;
+    this.height = canvas.height;
+  }
+
   /**
    * 取节点的**世界坐标**（沿 `parentNode` 累加 `left/top`）。
    *
@@ -47,45 +87,7 @@ export interface GamePageHandle {
    *
    * e2e 点画布控件必须用世界坐标 —— 背像素的测试会在换版面时静默失效。
    */
-  worldRect(node: any): Rect;
-  /** 深度优先按 `state.id` 找节点（侧栏/卡内控件都不是画布的直接子节点）。 */
-  find(id: string): any;
-}
-
-export interface CreatePageOptions {
-  /** canvas 元素 id，默认 `canvas`。 */
-  canvasId?: string;
-  /** 是否打开持续帧（默认 true；极少数纯静态页可以关掉省电）。 */
-  continuousFrames?: boolean;
-}
-
-/**
- * 初始化游戏页面。
- *
- * ⚠️ 必须在 DOM 就绪后调用（脚本用 `defer` 注入，所以默认就是就绪的）。
- */
-export function createPage(options: CreatePageOptions = {}): GamePageHandle {
-  const canvasId = options.canvasId || 'canvas';
-  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
-  if (!canvas) {
-    throw new Error(`createPage：找不到 <canvas id="${canvasId}">`);
-  }
-
-  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-  const ice: any = new ICE().init(canvasId, { dpr });
-
-  // 街机主题是完整主题（token 组与内置 dark 一致，只换颜色），小游戏统一用它。
-  // 第二个参数把主题也同步给引擎（选中框 / 手柄 / 插槽等外壳 token）。
-  iceUIManager.registerTheme('arcade', ICE_ARCADE_THEME).setTheme('arcade', ice);
-  const theme = iceUIManager.getTheme();
-
-  new ICEHoverManager(ice).start();
-
-  if (options.continuousFrames !== false) {
-    ice.setContinuousFrames(true);
-  }
-
-  const worldRect = (node: any): Rect => {
+  worldRect(node: any): Rect {
     let left = 0;
     let top = 0;
     let cursor = node;
@@ -100,11 +102,12 @@ export function createPage(options: CreatePageOptions = {}): GamePageHandle {
       width: (node.state && node.state.width) || 0,
       height: (node.state && node.state.height) || 0,
     };
-  };
+  }
 
-  const find = (id: string): any => {
-    if (typeof ice.find === 'function') {
-      const hit = ice.find(id);
+  /** 深度优先按 `state.id` 找节点（侧栏/卡内控件都不是画布的直接子节点）。 */
+  find(id: string): any {
+    if (typeof this.ice.find === 'function') {
+      const hit = this.ice.find(id);
       if (hit) return hit;
     }
     // 兜底：自己深度优先（`ice.find` 的行为随引擎版本有过变化，这里不依赖它）
@@ -116,16 +119,13 @@ export function createPage(options: CreatePageOptions = {}): GamePageHandle {
       }
       return undefined;
     };
-    return walk(ice.childNodes);
-  };
+    return walk(this.ice.childNodes);
+  }
+}
 
-  return {
-    ice,
-    theme,
-    canvas,
-    width: canvas.width,
-    height: canvas.height,
-    worldRect,
-    find,
-  };
+export interface CreatePageOptions {
+  /** canvas 元素 id，默认 `canvas`。 */
+  canvasId?: string;
+  /** 是否打开持续帧（默认 true；极少数纯静态页可以关掉省电）。 */
+  continuousFrames?: boolean;
 }

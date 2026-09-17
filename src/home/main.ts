@@ -31,7 +31,7 @@
  * ① **画布高度必须在创建引擎之前写进 `<canvas>` 属性** —— 引擎初始化时读的就是这个尺寸。
  *    所以版面是**纯函数** `layoutHome()`：`measureCanvasHeight` 与渲染共用同一份坐标，
  *    不存在"预留高度与渲染坐标算得不一样 → 页脚被画布底边静默裁掉"这种事。
- * ② **组件必须在 `createPage()` 之后创建** —— 它们都在构造期读 `iceUIManager.getTheme()`，
+ * ② **组件必须在 `new GamePage()` 之后创建** —— 它们都在构造期读 `iceUIManager.getTheme()`，
  *    早于主题注册就会拿到浅色主题（白底白字，且不报任何错）。
  *
  * ## 圆角是烘在 PNG 里的
@@ -53,8 +53,8 @@ import {
   ICEStatCard,
   ICETag,
 } from 'ice-web-components';
-import { GROUPS, PAGES, coverUrl, pagesMissingCover, stats, type GamePage, type PageKind } from '../domain/catalog';
-import { createPage, type GamePageHandle } from '../kit';
+import { GROUPS, PAGES, coverUrl, pagesMissingCover, stats, type CatalogPage, type PageKind } from '../domain/catalog';
+import { GamePage } from '../kit';
 import { brandBadge, fitControlWidth, measureTextWidth } from './chrome';
 import { mountEffects, type EffectsLayer } from './effects-canvas';
 import { buildFooter, measureFooterHeight, CANVAS_CONTENT_WIDTH } from './footer';
@@ -152,7 +152,7 @@ interface HomeLayout {
   statsTop: number;
   statsHeight: number;
   statWidth: number;
-  featured: { headerTop: number; carouselTop: number; carouselHeight: number; slides: GamePage[] } | null;
+  featured: { headerTop: number; carouselTop: number; carouselHeight: number; slides: CatalogPage[] } | null;
   sections: SectionHeader[];
   noteTop: number;
   footerTop: number;
@@ -160,7 +160,7 @@ interface HomeLayout {
 }
 
 /** 进精选展厅的页面：**有封面的**（没封面就展示不了，硬上会开天窗）。 */
-function featuredSlides(): GamePage[] {
+function featuredSlides(): CatalogPage[] {
   return PAGES.filter((page) => Boolean(coverUrl(page))).slice(0, FEATURED.maxSlides);
 }
 
@@ -219,7 +219,7 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 canvas.width = CANVAS_WIDTH;
 canvas.height = layout.height;
 
-const page: GamePageHandle = createPage({ continuousFrames: false });
+const page: GamePage = new GamePage({ continuousFrames: false });
 const theme = page.theme;
 const ice = page.ice;
 
@@ -625,7 +625,7 @@ function buildFeatured(spec: NonNullable<HomeLayout['featured']>): ICECarousel {
  * 幻灯片尺寸由 `ICECarousel.__render()` 强制写成"视口宽 × 视口高"，
  * 所以这里的子节点坐标就按那个尺寸算，不用自己管尺寸。
  */
-function buildFeaturedSlide(game: GamePage, height: number): any {
+function buildFeaturedSlide(game: CatalogPage, height: number): any {
   const width = CONTENT_WIDTH;
   const inset = 14;
   const coverHeight = height - inset * 2;
@@ -851,7 +851,7 @@ function buildSheen(parent: any, left: number, top: number, width: number, heigh
 }
 
 /** 没有封面时的占位块：accent 大号首字，看起来是"有意留白"而不是漏了图。 */
-function renderCoverPlaceholder(card: any, game: GamePage): void {
+function renderCoverPlaceholder(card: any, game: CatalogPage): void {
   card.addChild(
     new ICEPanel({
       interactive: false,
@@ -905,7 +905,7 @@ function renderCoverPlaceholder(card: any, game: GamePage): void {
  * 标题可交互就意味着"鼠标停在标题上时卡片收不到 hoverchange，高亮框不出现"。
  * 所以这里显式把它关掉（`getTitleNode()` 是公开访问器）。
  */
-function buildCard(game: GamePage, left: number, top: number): CardNodes {
+function buildCard(game: CatalogPage, left: number, top: number): CardNodes {
   /*
    * 类型徽标的文案与尺寸在 `ICECard` 构造**之前**算好。
    *

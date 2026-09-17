@@ -19,7 +19,7 @@
 import { ICELabel, ICEProgressBar, ICESeparator } from 'ice-web-components';
 import { FAMILY_HOME, FAMILY_REPOS, SELF_REPO, reposInGroup } from '../domain/family-repos';
 import { stats } from '../domain/catalog';
-import type { GamePageHandle } from '../kit';
+import type { GamePage } from '../kit';
 import { brandBadge, createLink, measureTextWidth, textWidth } from './chrome';
 
 /* --------------------------------- 度量常量 --------------------------------- */
@@ -285,7 +285,7 @@ export function measureFooterHeight(width = CANVAS_CONTENT_WIDTH): number {
 export const CANVAS_CONTENT_WIDTH = 1180 - 44 * 2;
 
 export interface FooterOptions {
-  page: GamePageHandle;
+  page: GamePage;
   /** 左边缘（画布坐标）。 */
   left: number;
   /** 上边缘（分隔线所在位置，画布坐标）。 */
