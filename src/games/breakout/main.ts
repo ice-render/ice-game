@@ -51,7 +51,6 @@ class BreakoutPage extends GamePage {
   constructor() {
     super();
     const STAGE = BreakoutPage.STAGE;
-    const theme = this.theme;
 
     /* -------------------------------- 存档与音效 -------------------------------- */
     this.store = createStore('breakout');
@@ -189,7 +188,7 @@ class BreakoutPage extends GamePage {
     /* --------------------------------- 首屏 --------------------------------- */
     this.syncShell();
     this.render();
-    this.ice.dirty = true;
+    this.ice.requestRepaint();
 
     /**
      * 调试 / e2e 句柄。刻意暴露**模型本身**：断言状态机与物理不需要靠像素猜，
@@ -317,7 +316,7 @@ class BreakoutPage extends GamePage {
         });
         break;
     }
-    this.ice.dirty = true;
+    this.ice.requestRepaint();
   }
 
   togglePause(): void {

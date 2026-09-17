@@ -100,7 +100,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
 
   const page = new GamePage({ canvasId: 'navbar', continuousFrames: false });
   const theme = page.theme;
-  const accent = theme.colors.primary;
+  const accent = token('ui.colors.primary');
 
   const openLink = options.openLink || ((url: string) => window.open(url, '_blank', 'noopener,noreferrer'));
 
@@ -343,7 +343,7 @@ export function mountNavbar(options: NavbarOptions): NavbarHandle {
   };
 
   applyActive();
-  page.ice.dirty = true;
+  page.ice.requestRepaint();
 
   return {
     page,

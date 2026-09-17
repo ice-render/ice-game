@@ -153,8 +153,7 @@ export class GameShell {
   constructor(options: ShellOptions) {
     const page = options.page;
     this.page = page;
-    const theme = page.theme;
-
+  
     const stage: ShellStage = options.stage || {
       left: Math.round((page.width - 720) / 2),
       top: 170,
@@ -296,7 +295,7 @@ export class GameShell {
           style: {
             fontSize: 22,
             fontWeight: '700',
-            fillStyle: stat.accent || theme.colors.text,
+            fillStyle: stat.accent || token('ui.colors.text'),
             fontFamily: '"Courier New", monospace',
           },
         });
@@ -578,7 +577,7 @@ export class GameShell {
     this.overlayNodes.subtitle.setText(spec.subtitle || '');
     this.overlayNodes.hint.setText(spec.hint || '');
     this.overlayRoot.setState({ display: true });
-    this.page.ice.dirty = true;
+    this.page.ice.requestRepaint();
     return this;
   }
 
@@ -586,7 +585,7 @@ export class GameShell {
   hideOverlay(): this {
     this.overlayKind = null;
     this.overlayRoot.setState({ display: false });
-    this.page.ice.dirty = true;
+    this.page.ice.requestRepaint();
     return this;
   }
 

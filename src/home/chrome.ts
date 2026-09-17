@@ -7,7 +7,7 @@
  * 这一层是**首页专用**，所以不放 `src/kit/`：kit 的定位是"每个游戏都会重复写的东西"，
  * 而导航栏/页脚是应用外壳，游戏里不会出现。
  */
-import { ICEImage } from 'ice-render';
+import { ICEImage, token, type ICEThemeTokenRef } from 'ice-render';
 import { ICELabel, ICEPanel, ICEWidget } from 'ice-web-components';
 import type { GamePage } from '../kit';
 
@@ -111,7 +111,7 @@ export const ICE_CUBE_SVG = `data:image/svg+xml,${encodeURIComponent(ICE_CUBE_RA
 
 export function brandBadge(
   parent: any,
-  options: { left: number; top: number; size?: number; accent: string; radius?: number; fillStyle?: any; glow?: boolean },
+  options: { left: number; top: number; size?: number; accent: string | ICEThemeTokenRef; radius?: number; fillStyle?: any; glow?: boolean },
 ): any {
   const size = options.size || 28;
 
@@ -151,7 +151,7 @@ export function brandBadge(
   const iceRef = parent && parent.ice ? parent.ice : parent;
   const probe = new Image();
   probe.onload = () => {
-    if (iceRef && typeof iceRef.dirty === 'boolean') iceRef.dirty = true;
+    if (iceRef && typeof iceRef.requestRepaint === 'function') iceRef.requestRepaint();
   };
   probe.onerror = () => {};
   probe.src = ICE_CUBE_SVG;
@@ -160,7 +160,7 @@ export function brandBadge(
 }
 
 /** 一条 1px 分隔线（横/竖）。 */
-export function divider(parent: any, options: { left: number; top: number; width?: number; height?: number; color: string }): any {
+export function divider(parent: any, options: { left: number; top: number; width?: number; height?: number; color: string | ICEThemeTokenRef }): any {
   const line = new ICEPanel({
     interactive: false,
     left: options.left,
@@ -187,7 +187,7 @@ export interface LinkOptions {
   paddingX?: number;
   /** 文字对齐（列式布局里常用左对齐 + 固定列宽）。 */
   align?: 'left' | 'center' | 'right';
-  accent: string;
+  accent: string | ICEThemeTokenRef;
   /** 点击回调（外链由调用方决定 window.open / location）。 */
   onClick: () => void;
   /**
@@ -235,7 +235,6 @@ export interface LinkHandle {
  * 把数据放进 `evt.param` —— 直接读 `payload.hovered` 恒为 `undefined` 且不报错（踩过）。
  */
 export function createLink(parent: any, page: GamePage, options: LinkOptions): LinkHandle {
-  const theme = page.theme;
   const fontSize = options.fontSize || 13;
   const paddingX = options.paddingX ?? 10;
   const width = options.width || textWidth(options.text, fontSize) + paddingX * 2;
@@ -280,7 +279,7 @@ export function createLink(parent: any, page: GamePage, options: LinkOptions): L
     align: options.align || 'center',
     verticalAlign: 'middle',
     text: options.text,
-    style: { fontSize, fillStyle: options.color || theme.colors.textSecondary },
+    style: { fontSize, fillStyle: options.color || token('ui.colors.textSecondary') },
   });
   node.addChild(label, false);
 
@@ -322,8 +321,8 @@ export function createLink(parent: any, page: GamePage, options: LinkOptions): L
           : active
             ? options.accent
             : hovered
-              ? theme.colors.text
-              : options.color || theme.colors.textSecondary,
+              ? token('ui.colors.text')
+              : options.color || token('ui.colors.textSecondary'),
       },
     });
 
@@ -346,7 +345,7 @@ export function createLink(parent: any, page: GamePage, options: LinkOptions): L
     }
 
     if (underlineNode) underlineNode.setState({ display: hovered || active });
-    page.ice.dirty = true;
+    page.ice.requestRepaint();
   };
 
   node.on('hoverchange', (evt: any) => {

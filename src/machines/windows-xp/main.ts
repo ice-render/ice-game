@@ -22,7 +22,7 @@ import * as ICEWEB from 'ice-web-components';
       const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
       const ice = new ICE.ICE().init('canvas', { dpr });
       const W = ICEWEB;
-      // 先切主题、再建组件：组件在构造时读一次主题 token
+      // 先切主题、再建组件（本机是"启动即定死"的一套 XP 主题，运行期不切）
       W.iceUIManager.registerTheme('xp', W.ICE_XP_THEME).setTheme('xp', ice); // 第二个参数 = 顺带把主题同步到引擎（选中框 / 手柄 / 插槽等外壳 token）
       const theme = W.iceUIManager.getTheme();
       new W.ICEHoverManager(ice).start();
@@ -58,7 +58,7 @@ import * as ICEWEB from 'ice-web-components';
         ice.viewport.scale = boxW / SCREEN_W;
         ice.viewport.tx = 0;
         ice.viewport.ty = 0;
-        ice.dirty = true; // 触发整帧重绘（视口变化也会让静态层缓存失效）
+        ice.requestRepaint(); // 触发整帧重绘（视口变化也会让静态层缓存失效）
       };
       applyLayout();
       let __layoutRaf = 0;
@@ -73,7 +73,7 @@ import * as ICEWEB from 'ice-web-components';
       /** 给浏览器 QA / 调试用的句柄（各应用自己往里塞） */
       const handles = {};
 
-      /** 把子树抬到指定 zIndex（同值保持父子顺序）。 */
+      /** 把子树抬到指定 zIndex。⚠️ 历史遗留：引擎 2.13 起绘制是「树序 + 兄弟按 zIndex」，不再需要递归整棵子树（详见 ice-smart-water `raiseSubtree` 的注释）。 */
       const raise = (node, z) => {
         if (!node || !node.state) return;
         node.state.zIndex = z;
@@ -501,7 +501,7 @@ import * as ICEWEB from 'ice-web-components';
 
       const paintWallpaper = (presetKey) => {
         wallpaperImage.setState({ src: renderWallpaper(presetKey) });
-        if (ice) ice.dirty = true;
+        if (ice) ice.requestRepaint();
       };
       paintWallpaper('bliss');
 
@@ -700,7 +700,7 @@ import * as ICEWEB from 'ice-web-components';
           raise(button, 9001);
           left += btnW + gap;
         });
-        ice.dirty = true;
+        ice.requestRepaint();
       };
 
       const focusWindow = (key) => {
@@ -1049,7 +1049,7 @@ import * as ICEWEB from 'ice-web-components';
           if (!point) return;
           this.current.push(point);
           this.currentLine.setState({ points: this.current.slice() });
-          if (this.ice) this.ice.dirty = true;
+          if (this.ice) this.ice.requestRepaint();
         }
 
         __up() {
@@ -1350,7 +1350,7 @@ import * as ICEWEB from 'ice-web-components';
             onLose();
           }
           updateBestLabel();
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         let announced = null;
@@ -1788,7 +1788,7 @@ import * as ICEWEB from 'ice-web-components';
           page.setState({ width: Number(scroll.getViewportSize()[0]), height });
           scroll.setContentSize(Number(scroll.getViewportSize()[0]), height);
           scroll.setScroll(0, 0);
-          ice.dirty = true;
+          ice.requestRepaint();
         };
 
         const renderError = (url, reason) => {
@@ -2372,7 +2372,7 @@ import * as ICEWEB from 'ice-web-components';
           scoreLabel.setText('0');
           state.runtime.paint();
           syncHud();
-          ice.dirty = true;
+          ice.requestRepaint();
         }
 
         handles.arcade = api;
@@ -2604,7 +2604,7 @@ import * as ICEWEB from 'ice-web-components';
           hit.on('hoverchange', (evt) => {
             const hovered = !!(evt && evt.param ? evt.param.hovered : evt && evt.hovered);
             hit.setState({ style: { ...hit.state.style, fillStyle: hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0)' } });
-            ice.dirty = true;
+            ice.requestRepaint();
           });
           footer.addChild(hit, false);
           return { label, hit };
@@ -2928,7 +2928,7 @@ import * as ICEWEB from 'ice-web-components';
         tile.on('hoverchange', (evt) => {
           const hovered = !!(evt && evt.param ? evt.param.hovered : evt && evt.hovered);
           tile.setState({ style: { ...tile.state.style, fillStyle: hovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0)' } });
-          ice.dirty = true;
+          ice.requestRepaint();
         });
         userTileList.addChild(tile, false);
         return tile;
@@ -3045,7 +3045,7 @@ import * as ICEWEB from 'ice-web-components';
       shutdownEntry.on('hoverchange', (evt) => {
         const hovered = !!(evt && evt.param ? evt.param.hovered : evt && evt.hovered);
         shutdownEntry.setState({ style: { ...shutdownEntry.state.style, fillStyle: hovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0)' } });
-        ice.dirty = true;
+        ice.requestRepaint();
       });
       loginFooter.addChild(shutdownEntry, false);
       xpLabel(loginFooter, {
@@ -3099,7 +3099,7 @@ import * as ICEWEB from 'ice-web-components';
       let sessionTimer = null;
       const setPhase = (phase) => {
         session.phase = phase;
-        ice.dirty = true;
+        ice.requestRepaint();
       };
       const showLogin = () => {
         clearTimeout(sessionTimer);
@@ -3206,7 +3206,7 @@ import * as ICEWEB from 'ice-web-components';
           bootBlocks.forEach((block, index) => {
             block.setState({ left: Math.min(196, offset + index * 24) });
           });
-          ice.dirty = true;
+          ice.requestRepaint();
         }, 40);
         sessionTimer = setTimeout(showLogin, 2200);
       };

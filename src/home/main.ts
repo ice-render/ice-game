@@ -39,7 +39,7 @@
  * 引擎的 `ICEImage` 不支持圆角裁剪（`clipType` 只有 `circle`），所以封面圆角只能在生成时
  * 用离屏画布的 `clip()` 裁好（`npm run covers`）。
  */
-import { ICEImage } from 'ice-render';
+import { ICEImage, token, type ICEThemeTokenRef } from 'ice-render';
 import {
   ICEBadge,
   ICEButton,
@@ -232,8 +232,6 @@ class HomePage extends GamePage {
     this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
     this.canvas.width = HomePage.CANVAS_WIDTH;
     this.canvas.height = this.layout.height;
-    this.theme = this.theme;
-    this.ice = this.ice;
 
     this.goto = (target: string) => {
       window.location.href = target;
@@ -318,7 +316,7 @@ class HomePage extends GamePage {
       left: HomePage.PAD,
       top: HomePage.HERO.top + 2,
       size: HomePage.HERO.badgeSize,
-      accent: this.theme.colors.primary,
+      accent: token('ui.colors.primary'),
       fillStyle: this.badgeGradient,
       glow: true,
     });
@@ -332,7 +330,7 @@ class HomePage extends GamePage {
         height: 46,
         verticalAlign: 'middle',
         text: '画布游戏厅',
-        style: { fontSize: 34, fontWeight: '700', fillStyle: this.theme.colors.text },
+        style: { fontSize: 34, fontWeight: '700', fillStyle: token('ui.colors.text') },
       }),
     );
 
@@ -348,7 +346,7 @@ class HomePage extends GamePage {
         height: 24,
         verticalAlign: 'middle',
         text: '入口页本身也是 ICE 组件搭的：统计卡 / 轮播 / 标签 / 徽标 / 按钮 —— 连背景的粒子都在 Canvas 里跑',
-        style: { fontSize: 13, fillStyle: this.theme.colors.textSecondary },
+        style: { fontSize: 13, fillStyle: token('ui.colors.textSecondary') },
       }),
     );
 
@@ -384,7 +382,7 @@ class HomePage extends GamePage {
 
     /* hero 规模卡：`ICEStatCard`（图标 + 标题 + 数值 + 趋势），三列等分。 */
     {
-      const cards: { id: string; icon: string; iconColor: string; iconBg: string; title: string; value: number; trend: string }[] = [
+      const cards: { id: string; icon: string; iconColor: string | ICEThemeTokenRef; iconBg: string; title: string; value: number; trend: string }[] = [
         {
           id: 'stat-games',
           icon: '▶',
@@ -431,7 +429,7 @@ class HomePage extends GamePage {
             value: card.value,
             trend: card.trend,
             trendType: 'info',
-            style: { fillStyle: this.theme.colors.surface, strokeStyle: this.theme.colors.border, shadowBlur: 0 },
+            style: { fillStyle: token('ui.colors.surface'), strokeStyle: token('ui.colors.border'), shadowBlur: 0 },
           }),
         );
       });
@@ -461,7 +459,7 @@ class HomePage extends GamePage {
       this.buildSectionHeader({
         icon: section.kind === 'game' ? '▶' : '■',
         // 图标压在浅底小方块上 → 用 `*TextEmphasis` 那一档（primary 当字形只有 ~2.2:1）
-        iconColor: section.kind === 'game' ? this.theme.colors.primaryTextEmphasis : '#a370f7',
+        iconColor: section.kind === 'game' ? token('ui.colors.primaryTextEmphasis') : '#a370f7',
         label: section.label,
         blurb: `${section.blurb}　·　${group.items.length} 个`,
         top: section.headerTop,
@@ -488,7 +486,7 @@ class HomePage extends GamePage {
           this.missing.length > 0
             ? `有 ${this.missing.length} 个页面还没抓封面（${this.missing.join('、')}）—— 跑 npm run covers`
             : '每个页面各自独占整屏与键盘：进去之后按浏览器「后退」回到这里',
-        style: { fontSize: 12, fillStyle: this.theme.colors.textTertiary },
+        style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
       }),
     );
 
@@ -574,9 +572,9 @@ class HomePage extends GamePage {
      *
      * **三块画布各置一次**：导航栏与效果层都是另一个 ICE 实例，互相不影响。
      */
-    this.ice.dirty = true;
-    this.navbar.page.ice.dirty = true;
-    this.effects.page.ice.dirty = true;
+    this.ice.requestRepaint();
+    this.navbar.page.ice.requestRepaint();
+    this.effects.page.ice.requestRepaint();
 
     /**
      * 调试 / e2e 句柄。
@@ -739,7 +737,7 @@ class HomePage extends GamePage {
  * ⚠️ `ICESeparator` 的**线宽取自 props.width/height**（它内部那个 `ICERect` 跟着走），
  * 所以横线要显式给 `height: 1`，否则它会按默认的 1×1 变成一个小点。
  *
- * 线色**不能**用 `style` 覆盖：`ICESeparator` 内部把 `theme.colors.border` 写死在子节点上
+ * 线色**不能**用 `style` 覆盖：`ICESeparator` 内部把 `token('ui.colors.border')` 写死在子节点上
  * （这是它的设计 —— 分隔线只该跟着主题走）。所以这里不传颜色，免得留下一个不生效的参数。
  */
   trailLine(left: number, top: number): any {
@@ -765,7 +763,7 @@ class HomePage extends GamePage {
  */
   buildSectionHeader(options: {
     icon: string;
-    iconColor: string;
+    iconColor: string | ICEThemeTokenRef;
     label: string;
     blurb: string;
     top: number;
@@ -796,7 +794,7 @@ class HomePage extends GamePage {
         height: HomePage.SECTION_HEADER_HEIGHT,
         verticalAlign: 'middle',
         text: label,
-        style: { fontSize: 18, fontWeight: '700', fillStyle: this.theme.colors.text },
+        style: { fontSize: 18, fontWeight: '700', fillStyle: token('ui.colors.text') },
       }),
     );
 
@@ -810,7 +808,7 @@ class HomePage extends GamePage {
         height: HomePage.SECTION_HEADER_HEIGHT,
         verticalAlign: 'middle',
         text: blurb,
-        style: { fontSize: 12, fillStyle: this.theme.colors.textTertiary },
+        style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
       }),
     );
 
@@ -909,7 +907,7 @@ class HomePage extends GamePage {
       width,
       height,
       style: {
-        fillStyle: this.theme.colors.surface,
+        fillStyle: token('ui.colors.surface'),
         strokeStyle: 'rgba(0,0,0,0)',
         lineWidth: 0,
         shadowBlur: 0,
@@ -1001,7 +999,7 @@ class HomePage extends GamePage {
         height: 42,
         verticalAlign: 'middle',
         text: game.title,
-        style: { fontSize: 26, fontWeight: '700', fillStyle: this.theme.colors.text },
+        style: { fontSize: 26, fontWeight: '700', fillStyle: token('ui.colors.text') },
       }),
       false,
     );
@@ -1015,7 +1013,7 @@ class HomePage extends GamePage {
         height: 22,
         verticalAlign: 'middle',
         text: game.tagline,
-        style: { fontSize: 13.5, fillStyle: this.theme.colors.textSecondary },
+        style: { fontSize: 13.5, fillStyle: token('ui.colors.textSecondary') },
       }),
       false,
     );
@@ -1070,7 +1068,7 @@ class HomePage extends GamePage {
         height: 42,
         verticalAlign: 'middle',
         text: '占满整屏，键盘独占 —— 按浏览器「后退」回来',
-        style: { fontSize: 12, fillStyle: this.theme.colors.textTertiary },
+        style: { fontSize: 12, fillStyle: token('ui.colors.textTertiary') },
       }),
       false,
     );
@@ -1116,7 +1114,7 @@ class HomePage extends GamePage {
         width: HomePage.COVER_WIDTH,
         height: HomePage.COVER_HEIGHT,
         radius: 10,
-        style: { fillStyle: this.theme.colors.elevated, strokeStyle: this.theme.colors.borderSecondary },
+        style: { fillStyle: token('ui.colors.elevated'), strokeStyle: token('ui.colors.borderSecondary') },
       }),
       false,
     );
@@ -1140,7 +1138,7 @@ class HomePage extends GamePage {
         width: HomePage.COVER_WIDTH,
         align: 'center',
         text: '封面待抓取 · npm run covers',
-        style: { fontSize: 11, fillStyle: this.theme.colors.textTertiary },
+        style: { fontSize: 11, fillStyle: token('ui.colors.textTertiary') },
       }),
       false,
     );
@@ -1154,8 +1152,9 @@ class HomePage extends GamePage {
  *
  * - `title` / `paddingTop` / `paddingLeft` → 标题由 `ICECard` 自己创建并放在封面下方；
  * - `extra` → 类型徽标（`ICEBadge`）。**传工厂函数**是官方推荐用法：
- *   直接传现成节点的话，节点是先于卡片创建的，会被卡片底色盖住（组件内部会兜底抬 zIndex，
- *   但工厂函数更干净）；它落在右上角、与标题同一行，宽度由 `ICECard` 算好。
+ *   直接传现成节点的话，节点是先于卡片创建的，会被卡片底色盖住（引擎 2.13 起绘制是「树序 +
+ *   兄弟按 zIndex」，这条已经被根治，但工厂函数仍然是更干净的写法）；它落在右上角、与标题同一行，
+ *   宽度由 `ICECard` 算好。
  *
  * ⚠️ `ICECard` 的标题节点默认 `interactive: true`（引擎里 `interactive` 默认就是 true）。
  * 而 `ICEHoverManager` 只把 hover 派发给**最上层**的那个交互节点、**不向祖先冒泡** ——
@@ -1183,7 +1182,7 @@ class HomePage extends GamePage {
       title: game.title,
       paddingLeft: HomePage.COVER_INSET,
       paddingTop: HomePage.CARD_ROW.title,
-      style: { fillStyle: this.theme.colors.surface, strokeStyle: this.theme.colors.border },
+      style: { fillStyle: token('ui.colors.surface'), strokeStyle: token('ui.colors.border') },
       extra: () =>
         new ICEBadge({
           interactive: false,
@@ -1285,7 +1284,7 @@ class HomePage extends GamePage {
       const hovered = Boolean(payload && payload.param && payload.param.hovered);
       frame.setState({ display: hovered });
       sheen.setState({ display: hovered });
-      this.ice.dirty = true;
+      this.ice.requestRepaint();
     });
 
     card.addChild(
@@ -1297,7 +1296,7 @@ class HomePage extends GamePage {
         height: 18,
         verticalAlign: 'middle',
         text: game.tagline,
-        style: { fontSize: 12.5, fillStyle: this.theme.colors.textSecondary },
+        style: { fontSize: 12.5, fillStyle: token('ui.colors.textSecondary') },
       }),
       false,
     );
