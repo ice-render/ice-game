@@ -73,12 +73,17 @@ import * as ICEWEB from 'ice-web-components';
       /** 给浏览器 QA / 调试用的句柄（各应用自己往里塞） */
       const handles = {};
 
-      /** 把子树抬到指定 zIndex。⚠️ 历史遗留：引擎 2.13 起绘制是「树序 + 兄弟按 zIndex」，不再需要递归整棵子树（详见 ice-smart-water `raiseSubtree` 的注释）。 */
-      const raise = (node, z) => {
-        if (!node || !node.state) return;
-        node.state.zIndex = z;
-        (node.childNodes || []).forEach((child) => raise(child, z));
-      };
+      /**
+       * 桌面外壳里两处「永远在最上面」的**显式钉子**：
+       * - 任务栏：要一直压在窗口层之上（开始菜单走 `ICEOverlayManager` = 工具层，仍在任务栏之上）；
+       * - 会话幕布（开机 / 登录 / 关机）：要盖住包括任务栏在内的一切。
+       *
+       * ⚠️ 引擎 2026-09 起 `zIndex` **只在兄弟之间比较**、子永远画在父之上，所以
+       * ① 只给这一层设值就够了（不再递归整棵子树）；② 窗口的"点谁谁在最上"改用引擎的
+       * `bringToFront()`（它把同层重编号成 `-(n-1) … 'auto'`，不再需要自己维护 `topZ` 计数器）。
+       */
+      const TASKBAR_Z_INDEX = 9000;
+      const SESSION_ROOT_Z_INDEX = 9800;
       const mixHex = (from, to, t) => {
         const parse = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
         const [r1, g1, b1] = parse(from);
@@ -638,7 +643,6 @@ import * as ICEWEB from 'ice-web-components';
       const windowLayer = new W.ICEWidget({ left: 0, top: 0, width: SCREEN_W, height: DESKTOP_H, fill: false, stroke: false, interactive: false });
       desktop.addChild(windowLayer, false);
 
-      let topZ = 100;
       const openWindows = new Map();
       let activeKey = null;
 
@@ -695,9 +699,9 @@ import * as ICEWEB from 'ice-web-components';
             }
           });
           taskButtons.addChild(button, false);
-          // 任务栏整体被 raise 到 z9000（梯度背景也是 9000），但任务按钮是后来动态创建的，
-          // 默认 z 为 0，会被同级的梯度色带盖住而画不出来。把按钮子树抬到 9001 压过背景。
-          raise(button, 9001);
+          // 任务按钮是动态创建的：它在 `taskButtons` 里没有兄弟竞争，而 `taskButtons` 本身
+          // 是在任务栏的渐变带**之后**加入的 → 同层按加入顺序就在色带之上，不需要再抬 zIndex
+          //（曾经写死 9001 是为了绕开"整棵子树递归设成 9000"那个历史写法）。
           left += btnW + gap;
         });
         ice.requestRepaint();
@@ -709,8 +713,7 @@ import * as ICEWEB from 'ice-web-components';
         entry.minimized = false;
         entry.window.setState({ display: true });
         activeKey = key;
-        topZ += 1;
-        raise(entry.window, topZ);
+        entry.window.bringToFront();
         openWindows.forEach((other, otherKey) => other.window.setActive(otherKey === key));
         refreshTaskButtons();
       };
@@ -761,8 +764,7 @@ import * as ICEWEB from 'ice-web-components';
           onMinimize: () => minimizeWindow(app.key),
           onActivate: () => {
             activeKey = app.key;
-            topZ += 1;
-            raise(win, topZ);
+            win.bringToFront();
             openWindows.forEach((other, otherKey) => other.window.setActive(otherKey === app.key));
             refreshTaskButtons();
           },
@@ -3229,10 +3231,10 @@ import * as ICEWEB from 'ice-web-components';
       // 壁纸 → 图标 → 窗口 → 任务栏，任务栏永远在最上面
       desktop.addChild(taskbar, false);
       ice.addChild(desktop);
-      raise(taskbar, 9000);
+      taskbar.setState({ zIndex: TASKBAR_Z_INDEX, paramsDirty: false });
       // 会话幕布（开机 / 登录 / 关机）盖在任务栏之上，登录完才揭幕
       ice.addChild(sessionRoot);
-      raise(sessionRoot, 9800);
+      sessionRoot.setState({ zIndex: SESSION_ROOT_Z_INDEX, paramsDirty: false });
       // 开场：自动打开「我的电脑」，让人一眼看到窗口的样子（登录前藏在幕布后面）
       openApp(APPS[0]);
       startBoot();
