@@ -420,6 +420,42 @@ TDK / JSON-LD / **文字版**（`.ice-seo-sr`，视觉隐藏但含真实 `<a>` �
 本仓画布宽度不统一（小游戏与首页 1180，Windows XP 桌面是 1440×900），
 写死会让其中一个页面的移动端初始视口与画布不匹配（这条断言曾经假失败过）。
 
+### 16. 改画布尺寸只能走 `ice.fitCanvasToDisplaySize()`（dpr>1 下直接写会整页变形）
+
+引擎在 `ICE.init(canvas, { dpr })` 里，**dpr>1 时读画布当时的 CSS 尺寸**，把 backing store
+放大成 `css × dpr`，并把 CSS 尺寸写成**内联样式**。于是"init 之后自己写 `canvas.width/height`"
+这条路径有两种命运：
+
+| 场景 | 结果 |
+|---|---|
+| dpr = 1 | 引擎的 dpr 分支根本不执行、没有内联样式，属性尺寸就是盒子尺寸 → **恰好无害** |
+| dpr > 1 | backing store 被打回 1×、内联 CSS 尺寸留在原地 → **拉伸/压扁 + 发虚**，且引擎内部尺寸与 DOM 不再一致（命中会偏） |
+
+实测（线上首页、dpr=2）：内容是 1971px 高，`main.ts` 写的是 `canvas.height = 1971`，
+而内联 `style.height` 还停在 HTML 占位值 `660px` → 整页被放大 2× 又压扁 3×、右侧被裁。
+Retina 上必现，而**本仓所有门禁都是绿的**（e2e 与两个截图脚本都跑 `deviceScaleFactor: 1`）。
+
+规矩：
+
+- 要改尺寸 —— `ice.fitCanvasToDisplaySize(cssWidth, cssHeight)`。它一次管四件事：
+  backing store ×dpr、内联 CSS 逻辑尺寸、引擎内部 `canvasWidth/Height`、命中矩形（并自己置脏）。
+  上游的 `arcade` / `windows-xp` 页用的就是它；
+- **init 之前**按设计尺寸写 `canvas.width/height` 是允许的（`navbar.ts` / `effects-canvas.ts`
+  与游戏模板都这么声明尺寸）—— 危险的是 init 之后的写入；
+- `resize` 处理器里同样不许直接写：`#bg` 的 resize 曾直接写 `canvas.height`，
+  dpr=2 下拉高窗口后属性 1200 vs 盒子 900（压扁 + 退回 1×）；
+- **别把 backing store 当设计尺寸**：`GamePage.width/height` 取 `canvas.width/dpr`
+  （dpr=1 时两者相同，所以这条在 dpr=1 下看不出来）。实测 breakout 的鼠标换算
+  （`this.width / rect.width`）曾因此在 Retina 上算出 2，指针移到哪挡板就跑到两倍偏移处；
+- 页面暴露的尺寸（`__gameHome.size`、`effects.stats().canvas`）报**逻辑尺寸** ——
+  报 backing store 会让断言随屏幕变。
+
+回归闸门：`e2e/hidpi.spec.ts`（`deviceScaleFactor: 2`，覆盖**首页 + 目录里每个入口页**的每块画布：
+`backing store == CSS 盒子 × dpr` + 引擎内部尺寸 == DOM 属性；外加首页内容高度、`#bg` resize、
+breakout 指针换算三条具体判据）。
+⚠️ 首页**不在 `PAGES` 里**（它是入口不是游戏）：只遍历 `entryPages()` 会漏掉首页 ——
+第一版判据就是这么变成空门的（唯一坏掉的那页没被覆盖，用例全绿）。
+
 ## 门禁
 
 ```bash
@@ -434,6 +470,9 @@ npm run verify        # 上面除 e2e 外全部
 npm run covers        # 抓首页卡片封面（真跑一遍游戏；改了画面就重跑）
 npm run screenshots   # 抓 README 用的截图（真 Chrome；改了版面就重跑，别手截）
 ```
+
+⚠️ `test:e2e` 的其余用例都跑 `deviceScaleFactor: 1`；**高分屏那一档在 `e2e/hidpi.spec.ts`
+里自己声明 dpr=2**（同一条命令内，会自动带上，不用额外记一条命令）。
 
 **截图脚本的一条硬要求**：`shoot-screenshots.mjs` 抓首页前会先把轮播**按停并回到第 0 张** ——
 它默认每 5.2s 自动切一张，不按停的话每次跑抓到的幻灯片都不同，

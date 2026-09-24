@@ -257,6 +257,8 @@ export function mountEffects(): EffectsLayer {
   canvas.height = height;
 
   const page = new GamePage({ canvasId: 'bg', continuousFrames: false });
+  /** 效果层的**逻辑**高度（视口高度）。backing store 是它的 `dpr` 倍，别拿 canvas.height 当它。 */
+  let logicalHeight = height;
 
   /** 底色：一层很淡的径向渐变，让背景不是纯平（画布自身透明，露出的还是 body 的底色）。 */
   const base = page.ice.createRadialGradient(
@@ -295,9 +297,15 @@ export function mountEffects(): EffectsLayer {
 
   const resize = () => {
     const next = Math.max(420, window.innerHeight);
-    if (canvas.height === next) return;
-    canvas.height = next;
-    page.ice.refreshInputRect();
+    if (logicalHeight === next) return;
+    logicalHeight = next;
+    /*
+     * ⚠️ 走引擎的尺寸入口，不要直接写 `canvas.height`：直接写只会改 backing store
+     * （而且**丢掉 dpr**，退回 1×），内联的 CSS 高度留在原地 →
+     * 效果层被纵向压扁且发虚（实测 dpr=2 下把窗口拉高：属性 1200 vs 盒子 900）。
+     * `fitCanvasToDisplaySize()` 会把 backing store、内联尺寸、命中矩形一起对齐。
+     */
+    page.ice.fitCanvasToDisplaySize(EFFECTS.width, next);
     field.resize(EFFECTS.width, next);
     page.ice.requestRepaint();
   };
@@ -319,7 +327,8 @@ export function mountEffects(): EffectsLayer {
     loop,
     resize,
     stats: () => ({
-      canvas: `${canvas.width}×${canvas.height}`,
+      // 报**逻辑**尺寸（backing store 在 dpr>1 时是它的 dpr 倍，拿它做断言会随屏幕变）
+      canvas: `${EFFECTS.width}×${logicalHeight}`,
       particles: field.particleCount(),
       frames: loop.frames,
       paused: loop.paused,

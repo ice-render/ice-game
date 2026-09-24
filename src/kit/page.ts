@@ -81,8 +81,15 @@ export class GamePage {
     }
 
     this.canvas = canvas;
-    this.width = canvas.width;
-    this.height = canvas.height;
+    /*
+     * ⚠️ **要除以 dpr**：dpr>1 时引擎已经把 backing store 放大成 `css × dpr`（见类注释），
+     * 直接读 `canvas.width/height` 拿到的是**设备像素**。
+     *
+     * 拿设备像素当设计尺寸会整体差 dpr 倍 —— 实测：`breakout` 的鼠标换算
+     * （`this.width / rect.width`）在 Retina 上算出 2，指针移到哪、挡板就跑到两倍偏移处。
+     */
+    this.width = canvas.width / dpr;
+    this.height = canvas.height / dpr;
   }
 
   /**
