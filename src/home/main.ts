@@ -230,8 +230,20 @@ class HomePage extends GamePage {
     this.layout = this.layoutHome();
 
     this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    this.canvas.width = HomePage.CANVAS_WIDTH;
-    this.canvas.height = this.layout.height;
+    /*
+     * 画布高度是**算出来的**（内容有多高就多高），所以必须在这里改一次尺寸。
+     *
+     * ⚠️ 只能走引擎的 `fitCanvasToDisplaySize()`：它一次管四件事 —— backing store ×dpr、
+     * 内联 CSS 逻辑尺寸、引擎内部的 `canvasWidth/Height` 与命中矩形。
+     * 早先是直接写 `canvas.width/height`，那在 dpr=1 下恰好无害（没有内联样式，
+     * 属性尺寸就是盒子尺寸），在 dpr>1 下却会把 backing store 打回 1×，
+     * 而**内联的 CSS 高度留在 HTML 占位值 660px 上** → 线上首页整页被放大 2× 又压扁 3×
+     * （Retina 必现；仓库里所有门禁都跑 dpr=1，所以一直没被发现）。
+     */
+    this.ice.fitCanvasToDisplaySize(HomePage.CANVAS_WIDTH, this.layout.height);
+    // 基类的 width/height 是构造期读的（那时画布还是 HTML 里的占位高度），这里按真实内容高度刷新
+    this.width = HomePage.CANVAS_WIDTH;
+    this.height = this.layout.height;
 
     this.goto = (target: string) => {
       window.location.href = target;
@@ -506,15 +518,15 @@ class HomePage extends GamePage {
      * 自检：页脚必须落在画布内。
      *
      * 预留值是 `layout.footerTop + layout.footerHeight`（与 `layoutHome()` 同一份坐标），
-     * 而 `canvas.height` 也是从它算出来的，所以**正常情况下必然够用**。
+     * 而画布高度也是从 `layout.height` 来的，所以**正常情况下必然够用**。
      * 留着这道断言是为了"将来有人改了页脚布局、却忘了同步度量"时**立刻报错** ——
      * 否则症状是"页脚被画布底边静默裁掉"，只有翻截图才发现。
      */
     {
       const footerBottom = this.layout.footerTop + this.footer.height;
-      if (footerBottom > this.canvas.height) {
+      if (footerBottom > this.layout.height) {
         throw new Error(
-          `首页页脚越出画布：页脚底部 ${footerBottom}px > 画布高 ${this.canvas.height}px。` +
+          `首页页脚越出画布：页脚底部 ${footerBottom}px > 画布高 ${this.layout.height}px。` +
             `检查 this.footer.ts 的 measureFooterHeight() 与 buildFooter() 是否共用同一份布局。`,
         );
       }
@@ -589,7 +601,8 @@ class HomePage extends GamePage {
       worldRect: this.worldRect,
       find: this.find,
       goto: this.goto,
-      size: { width: HomePage.CANVAS_WIDTH, height: this.canvas.height },
+      // 报**设计尺寸**（逻辑像素），不是 backing store —— dpr>1 时后者是它的 dpr 倍
+      size: { width: HomePage.CANVAS_WIDTH, height: this.layout.height },
       cardHeight: HomePage.CARD_HEIGHT,
       missingCovers: this.missing,
       /** 版面体检要**点名排除**的 id 前缀（裁剪视口的轮播、kit 的遮罩层）。 */
